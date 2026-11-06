@@ -13,17 +13,18 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = buildNumber
-        versionName = "1.0.$buildNumber"
+        versionName = "1.1.$buildNumber"
     }
 
-    // Clé de signature fixe : les mises à jour s'installent par-dessus l'ancienne version
-    // sans devoir désinstaller. Garde le dépôt privé.
+    // Clé de signature fixe, fournie par le secret GitHub KEYSTORE_B64 (décodé dans app/release.jks
+    // par le workflow). Elle n'est jamais dans le dépôt : les mises à jour s'installent par-dessus.
+    val storePass = System.getenv("SIGNING_PASSWORD") ?: "chrplus-app"
     signingConfigs {
         create("perso") {
-            storeFile = file("chrplus.jks")
-            storePassword = "chrplus-app"
-            keyAlias = "chrplus"
-            keyPassword = "chrplus-app"
+            storeFile = file("release.jks")
+            storePassword = storePass
+            keyAlias = System.getenv("SIGNING_ALIAS") ?: "chrplus"
+            keyPassword = storePass
         }
     }
 

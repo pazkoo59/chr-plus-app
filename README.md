@@ -1,28 +1,55 @@
 # CHR+
 
-Appli Android perso pour suivre et piloter la Toyota C-HR+ à travers Home Assistant.
+Appli Android **non officielle** pour suivre et piloter une Toyota électrique (C-HR+, bZ4X, Urban Cruiser…)
+à travers **Home Assistant**. Sans lien avec Toyota.
 
-- **Voiture** : batterie, autonomie, ouvrants (vue de dessus), verrouillage, santé, position, klaxon, warnings.
-- **Préchauffage** : clim en direct (lancer / arrêter, température, dégivrage), sièges et volant chauffants,
-  planificateur de départ (heure, jours, avance, température, seuil de froid, dégivrage).
-- **Recharge** : état, temps restant, charge programmée, tarif en cours, coûts, batterie sur 7 jours.
-- **Trajets** : km jour / semaine / mois / année, score de conduite, km par jour sur 30 jours.
+| Onglet | Contenu |
+|---|---|
+| **Voiture** | batterie, autonomie, ouvrants (vue de dessus), verrouillage, santé, voyants, entretien, position, klaxon, warnings |
+| **Préchauffage** | clim (lancer / arrêter, température, dégivrage), sièges et volant chauffants, **planificateur de départ** |
+| **Recharge** | état, temps restant, charge programmée, tarif en cours, **coût des recharges**, batterie sur 7 jours |
+| **Trajets** | km jour / semaine / mois / année, score de conduite, km par jour sur 30 jours |
+
+Seules les cartes que ta voiture sait remplir sont affichées.
+
+## Ce qu'il faut
+
+1. **Home Assistant**, joignable depuis le téléphone (Nabu Casa ou ta propre adresse).
+2. L'intégration **Toyota EU community** installée (Marketplace / HACS) et connectée à ton compte MyToyota.
+3. Un **jeton d'accès longue durée** : dans Home Assistant, ton profil → Sécurité → Jetons d'accès longue durée.
+   Pour installer le planificateur et le suivi des coûts, le jeton doit venir d'un compte **administrateur**.
 
 ## Installer
 
-1. Sur le téléphone, ouvre la page **Releases** du dépôt → `latest` → télécharge `CHR-Plus.apk`.
-2. Autorise l'installation depuis le navigateur si Android le demande, puis installe.
-3. Au premier lancement : colle l'adresse Nabu Casa et un **jeton d'accès longue durée** Home Assistant.
+Télécharge `CHR-Plus.apk` depuis la page **Releases** (version `latest`) sur le téléphone, autorise l'installation,
+puis colle l'adresse de Home Assistant et le jeton au premier lancement.
 
-Chaque modification poussée sur `main` recompile l'APK (onglet **Actions**) et remplace la release `latest`.
-La clé de signature est fixe (`app/chrplus.jks`), donc les mises à jour s'installent par-dessus : **garde ce dépôt privé**.
+L'appli trouve la voiture toute seule (par les identifiants internes de l'intégration, quelle que soit la langue
+de Home Assistant). Dans ⚙ Réglages : choix de la voiture s'il y en a plusieurs, du capteur de température
+extérieure et, en option, d'un capteur de tarif (heures pleines / creuses).
 
-## Fonctionnement
+### Planificateur et suivi des coûts
 
-Coque Android minimale (WebView) + appli HTML/JS dans `app/src/main/assets/`, qui parle directement à
-l'API WebSocket de Home Assistant. Elle s'appuie sur les entités de l'intégration Toyota et sur les aides
-créées pour le tableau de bord CHR+ (`input_number.chr_*`, `schedule.chr_jours_de_depart`,
-`script.chr_lancer_prechauffage`, `automation.pre_chauffage_c_hr`…).
+S'ils n'existent pas encore, l'appli propose de les **installer en un bouton**. Elle crée dans Home Assistant
+des réglages (`input_*`, `schedule`) et deux automatisations, tous nommés **« CHRplus … »** :
 
-Le planificateur tourne **dans Home Assistant** : l'appli ne fait que changer les réglages, le préchauffage
-se déclenche même si le téléphone est éteint.
+- `CHRplus préchauffage` : les jours choisis, lance la clim X minutes avant l'heure de départ s'il fait plus froid
+  que le seuil. Tout tourne dans Home Assistant, même téléphone éteint.
+- `CHRplus suivi des coûts` : estime l'énergie et le prix de chaque recharge (% gagné × capacité, ~10 % de pertes)
+  et le total du mois. Règle la capacité de la batterie et le prix du kWh dans l'onglet Recharge.
+
+Pour tout retirer : supprime ce qui commence par « CHRplus » dans Paramètres → Automatisations et Paramètres → Entrées.
+
+## Le jeton et la vie privée
+
+L'adresse et le jeton restent dans le téléphone. L'appli parle **uniquement** à ton Home Assistant
+(API WebSocket + REST), aucun autre serveur.
+
+## Compiler soi-même
+
+Chaque modification poussée sur `main` est compilée par GitHub Actions et publiée dans la release `latest`.
+La signature utilise une clé fournie par le secret **`KEYSTORE_B64`** (keystore encodé en base64, alias `chrplus`,
+mot de passe dans le secret facultatif `SIGNING_PASSWORD`, par défaut `chrplus-app`).
+Garde toujours la même clé : sinon les mises à jour ne s'installent plus par-dessus.
+
+Structure : coque Android minimale (WebView, `MainActivity.java`) + l'appli en HTML/JS dans `app/src/main/assets/`.

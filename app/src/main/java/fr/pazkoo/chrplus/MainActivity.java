@@ -33,6 +33,8 @@ public class MainActivity extends Activity {
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
         s.setAllowFileAccess(true);
+        // L'appli (fichiers locaux) appelle l'API REST de Home Assistant pour installer les automatisations.
+        s.setAllowUniversalAccessFromFileURLs(true);
         s.setMediaPlaybackRequiresUserGesture(true);
         s.setTextZoom(100);
 

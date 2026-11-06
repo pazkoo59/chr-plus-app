@@ -1,80 +1,59 @@
-/* CHR+ — appli de suivi de la Toyota C-HR+ via Home Assistant (API WebSocket). */
+/* CHR+ — suivi d'une Toyota électrique via Home Assistant (API WebSocket).
+ * Version générique : la voiture est trouvée automatiquement grâce à l'intégration
+ * « Toyota EU community » (identifiants internes indépendants de la langue). */
 (function () {
   'use strict';
 
-  // ---------- Entités Home Assistant ----------
-  const V = 'jtmbbbbd40j018476';
-  const E = {
-    batt: `sensor.${V}_niveau_de_batterie`,
-    range: `sensor.${V}_autonomie_electrique`,
-    rangeAc: `sensor.${V}_autonomie_electrique_avec_ac`,
-    charge: `sensor.${V}_etat_de_charge`,
-    chargeLeft: `sensor.${V}_temps_de_charge_restant`,
-    odo: `sensor.${V}_odometre`,
-    reported: `sensor.${V}_status_last_reported_by_car`,
-    fetched: `sensor.${V}_last_successful_fetch`,
-    tracker: `device_tracker.${V}_emplacement_de_stationnement`,
-    health: `binary_sensor.${V}_vehicle_health`,
-    statDay: `sensor.${V}_statistiques_aujourd_hui`,
-    statWeek: `sensor.${V}_statistiques_semaine_en_cours`,
-    statMonth: `sensor.${V}_statistiques_mois_en_cours`,
-    statYear: `sensor.${V}_statistiques_annee_en_cours`,
-    climate: `climate.${V}_climate`,
-    refresh: `button.${V}_refresh_vehicle_status`,
-    refreshTrips: `button.${V}_refresh_recent_trips`,
-    refreshElec: 'button.garage_chr_actualiser_le_statut_electrique_en_temps_reel',
-    horn: 'button.garage_chr_declencher_l_avertisseur_sonore',
-    hazard: 'switch.garage_chr_feux_de_detresse',
-    lock: 'lock.garage_chr_verrouillage_des_portes',
-    cabin: 'sensor.garage_chr_cabin_temperature',
-    warnings: 'sensor.garage_chr_warning_lights',
-    service: 'sensor.garage_chr_last_service',
-    speedWeek: 'sensor.garage_chr_average_speed_week',
-    wheel: 'switch.garage_chr_chauffage_du_volant',
-    seatD: 'select.garage_chr_chauffage_siege_conducteur',
-    seatP: 'select.garage_chr_chauffage_siege_passager',
-    seatRD: 'select.garage_chr_chauffage_siege_arriere_conducteur',
-    seatRP: 'select.garage_chr_chauffage_siege_arriere_passager',
-    outside: 'sensor.exterieur_temperature',
-    tariff: 'sensor.zlinky_current_price',
-    // Planificateur
-    planOn: 'input_boolean.pre_chauffage_c_hr',
-    depart: 'input_datetime.depart_c_hr',
-    lead: 'input_number.chr_avance_prechauffage',
-    target: 'input_number.chr_consigne_prechauffage',
-    threshold: 'input_number.chr_seuil_temperature_exterieure',
-    defrost: 'input_select.chr_degivrage',
-    days: 'schedule.chr_jours_de_depart',
-    start: 'sensor.chr_demarrage_prechauffage',
-    planAuto: 'automation.pre_chauffage_c_hr',
-    // Recharge (coûts)
-    costLast: 'input_number.c_hr_cout_derniere_recharge',
-    kwhLast: 'input_number.c_hr_energie_derniere_recharge',
-    costMonth: 'input_number.c_hr_cout_recharges_du_mois',
-    kwhMonth: 'input_number.c_hr_energie_recharges_du_mois',
-    priceKwh: 'input_number.c_hr_prix_kwh_de_la_charge',
-    capacity: 'input_number.capacite_batterie_c_hr',
+  // ---------- Correspondance identifiant interne Toyota -> rôle dans l'appli ----------
+  const TK = {
+    battery_level: 'batt', battery_range: 'range', battery_range_ac: 'rangeAc', charging_status: 'charge',
+    remaining_charge_time: 'chargeLeft', odometer: 'odo', status_last_reported: 'reported',
+    last_successful_fetch: 'fetched', parking_location: 'tracker', vehicle_health: 'health',
+    current_day_statistics: 'statDay', current_week_statistics: 'statWeek', current_month_statistics: 'statMonth',
+    current_year_statistics: 'statYear', climate: 'climate', refresh_vehicle_status: 'refresh',
+    refresh_recent_trips: 'refreshTrips', refresh_electric_realtime_status: 'refreshElec', sound_buzzer: 'horn',
+    hazard_lights: 'hazard', door_lock: 'lock', cabin_temperature: 'cabin', warning_lights: 'warnings',
+    last_service: 'service', average_speed_week: 'speedWeek', steering_heater: 'wheel',
+    seat_heater_driver: 'seatD', seat_heater_passenger: 'seatP', seat_heater_rear_driver: 'seatRD',
+    seat_heater_rear_passenger: 'seatRP', fuel_level: 'fuel', fuel_range: 'fuelRange', vin: 'vin',
+    driverseat_door: 'doorFL', passengerseat_door: 'doorFR', leftrearseat_door: 'doorRL', rightrearseat_door: 'doorRR',
+    driverseat_window: 'winFL', passengerseat_window: 'winFR', leftrearseat_window: 'winRL', rightrearseat_window: 'winRR',
+    trunk_door: 'trunk', hood: 'hood',
   };
-  const OPENINGS = {
-    doorFL: `binary_sensor.${V}_porte_siege_conducteur`,
-    doorFR: `binary_sensor.${V}_porte_siege_passager`,
-    doorRL: `binary_sensor.${V}_porte_arriere_gauche`,
-    doorRR: `binary_sensor.${V}_porte_arriere_droite`,
-    winFL: `binary_sensor.${V}_fenetre_siege_conducteur`,
-    winFR: `binary_sensor.${V}_fenetre_siege_passager`,
-    winRL: `binary_sensor.${V}_fenetre_arriere_gauche`,
-    winRR: `binary_sensor.${V}_fenetre_arriere_droite`,
-    trunk: `binary_sensor.${V}_coffre`,
-    hood: `binary_sensor.${V}_capot`,
-  };
-  const ALL_IDS = [...Object.values(E), ...Object.values(OPENINGS)];
+  const OPEN_ROLES = ['doorFL', 'doorFR', 'doorRL', 'doorRR', 'winFL', 'winFR', 'winRL', 'winRR', 'trunk', 'hood'];
+  const OPEN_NAMES = { doorFL: 'Porte conducteur', doorFR: 'Porte passager', doorRL: 'Porte AR gauche', doorRR: 'Porte AR droite',
+    winFL: 'Vitre conducteur', winFR: 'Vitre passager', winRL: 'Vitre AR gauche', winRR: 'Vitre AR droite', trunk: 'Coffre', hood: 'Capot' };
 
-  const DAYS = [
-    ['monday', 'Lu'], ['tuesday', 'Ma'], ['wednesday', 'Me'], ['thursday', 'Je'],
-    ['friday', 'Ve'], ['saturday', 'Sa'], ['sunday', 'Di'],
-  ];
+  // Aides Home Assistant : d'abord celles que l'appli installe (chrplus_*), puis d'anciens noms reconnus.
+  const HELPERS = {
+    planOn: ['input_boolean.chrplus_prechauffage_actif', 'input_boolean.pre_chauffage_c_hr'],
+    depart: ['input_datetime.chrplus_heure_de_depart', 'input_datetime.depart_c_hr'],
+    lead: ['input_number.chrplus_avance_prechauffage', 'input_number.chr_avance_prechauffage'],
+    target: ['input_number.chrplus_consigne_prechauffage', 'input_number.chr_consigne_prechauffage'],
+    threshold: ['input_number.chrplus_seuil_temperature_exterieure', 'input_number.chr_seuil_temperature_exterieure'],
+    defrost: ['input_select.chrplus_degivrage', 'input_select.chr_degivrage'],
+    days: ['schedule.chrplus_jours_de_depart', 'schedule.chr_jours_de_depart'],
+    planAuto: ['automation.chrplus_prechauffage', 'automation.pre_chauffage_c_hr'],
+    costLast: ['input_number.chrplus_cout_derniere_recharge', 'input_number.c_hr_cout_derniere_recharge'],
+    kwhLast: ['input_number.chrplus_energie_derniere_recharge', 'input_number.c_hr_energie_derniere_recharge'],
+    costMonth: ['input_number.chrplus_cout_recharges_du_mois', 'input_number.c_hr_cout_recharges_du_mois'],
+    kwhMonth: ['input_number.chrplus_energie_recharges_du_mois', 'input_number.c_hr_energie_recharges_du_mois'],
+    priceKwh: ['input_number.chrplus_prix_du_kwh', 'input_number.c_hr_prix_kwh_de_la_charge'],
+    capacity: ['input_number.chrplus_capacite_batterie', 'input_number.capacite_batterie_c_hr'],
+    costAuto: ['automation.chrplus_suivi_des_couts', 'automation.c_hr_suivi_du_cout_des_recharges'],
+    battStart: ['input_number.chrplus_batterie_debut_de_charge', 'input_number.c_hr_batterie_debut_de_charge'],
+  };
+  const PLAN_ROLES = ['planOn', 'depart', 'lead', 'target', 'threshold', 'defrost', 'days', 'planAuto'];
+  const COST_ROLES = ['costLast', 'kwhLast', 'costMonth', 'kwhMonth', 'priceKwh', 'capacity', 'costAuto'];
+  // Capteurs « maison » proposés par défaut s'ils existent
+  const OUTSIDE_GUESS = ['sensor.exterieur_temperature', 'sensor.outdoor_temperature', 'sensor.temperature_exterieure'];
+  const TARIFF_GUESS = ['sensor.zlinky_current_price', 'sensor.linky_ptec', 'sensor.zlinky_ptec'];
+
+  const DAYS = [['monday', 'Lu'], ['tuesday', 'Ma'], ['wednesday', 'Me'], ['thursday', 'Je'], ['friday', 'Ve'], ['saturday', 'Sa'], ['sunday', 'Di']];
+  const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const DAY_NAMES = ['dimanche', 'lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi'];
   const DEFROST = ['Aucun', 'Pare-brise', 'Lunette arrière', 'Avant + arrière'];
+  const DEFROST_PRESET = { 'Aucun': 'none', 'Pare-brise': 'front_defrost', 'Lunette arrière': 'rear_defrost', 'Avant + arrière': 'both_defrost' };
   const PRESET_LABEL = { none: 'Aucun', front_defrost: 'Pare-brise', rear_defrost: 'Lunette AR', both_defrost: 'Avant + AR' };
   const SEAT_LABEL = { off: 'Off', low: '1', medium: '2', high: '3' };
   const CHARGE_LABEL = {
@@ -82,14 +61,16 @@
     none: ['Débranchée', ''], unknown: ['Inconnu', ''], unavailable: ['Indisponible', 'r'],
   };
 
-  // ---------- Petits utilitaires ----------
+  // ---------- Utilitaires ----------
   const $ = (s, el = document) => el.querySelector(s);
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const st = (id) => STATES[id];
-  const val = (id) => (STATES[id] ? STATES[id].state : undefined);
-  const attr = (id, a) => (STATES[id] && STATES[id].attributes ? STATES[id].attributes[a] : undefined);
-  const has = (id) => { const v = val(id); return v !== undefined && v !== 'unknown' && v !== 'unavailable' && v !== ''; };
-  const num = (id, d = null) => { const n = parseFloat(val(id)); return isNaN(n) ? d : n; };
+  let STATES = {};
+  let E = {};          // rôle -> entity_id résolu
+  const st = (r) => (E[r] ? STATES[E[r]] : undefined);
+  const val = (r) => { const s = st(r); return s ? s.state : undefined; };
+  const attr = (r, a) => { const s = st(r); return s && s.attributes ? s.attributes[a] : undefined; };
+  const has = (r) => { const v = val(r); return v !== undefined && v !== 'unknown' && v !== 'unavailable' && v !== ''; };
+  const num = (r, d = null) => { const n = parseFloat(val(r)); return isNaN(n) ? d : n; };
   const fmt = (n, dec = 0) => (n === null || n === undefined || isNaN(n) ? '—' : Number(n).toLocaleString('fr-FR', { minimumFractionDigits: dec, maximumFractionDigits: dec }));
   const hhmm = (d) => d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   const ago = (iso) => {
@@ -103,9 +84,14 @@
     if (s < 86400) return `il y a ${Math.round(s / 3600)} h`;
     return `il y a ${Math.round(s / 86400)} j`;
   };
-  const dateFr = (iso) => {
-    const d = new Date(iso);
-    return isNaN(d) ? esc(iso) : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const dateFr = (iso) => { const d = new Date(iso); return isNaN(d) ? esc(iso) : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }); };
+  // Température extérieure : capteur (état) ou entité météo (attribut temperature)
+  const outsideTemp = () => {
+    if (!E.outside) return null;
+    const s = STATES[E.outside];
+    if (!s) return null;
+    const v = E.outside.startsWith('weather.') ? s.attributes && s.attributes.temperature : s.state;
+    const n = parseFloat(v); return isNaN(n) ? null : n;
   };
 
   let toastTimer;
@@ -114,28 +100,29 @@
     t.textContent = msg;
     t.className = 'toast show' + (err ? ' err' : '');
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => (t.className = 'toast'), 2600);
+    toastTimer = setTimeout(() => (t.className = 'toast'), 2800);
   }
 
-  // ---------- Réglages de connexion ----------
+  // ---------- Réglages enregistrés sur le téléphone ----------
+  const LS = {
+    get(k, d = '') { try { const v = localStorage.getItem('chr_' + k); return v === null ? d : v; } catch (e) { return d; } },
+    set(k, v) { try { if (v === null || v === undefined) localStorage.removeItem('chr_' + k); else localStorage.setItem('chr_' + k, v); } catch (e) { } },
+  };
   const cfg = {
-    get url() { try { return localStorage.getItem('chr_url') || ''; } catch (e) { return ''; } },
-    get token() { try { return localStorage.getItem('chr_token') || ''; } catch (e) { return ''; } },
-    save(url, token) { try { localStorage.setItem('chr_url', url); localStorage.setItem('chr_token', token); } catch (e) { } },
-    clear() { try { localStorage.removeItem('chr_url'); localStorage.removeItem('chr_token'); } catch (e) { } },
+    get url() { return LS.get('url'); }, get token() { return LS.get('token'); },
+    save(url, token) { LS.set('url', url); LS.set('token', token); },
+    clear() { ['url', 'token', 'car', 'outside', 'tariff'].forEach((k) => LS.set(k, null)); },
   };
   const cleanUrl = (u) => u.trim().replace(/\/+$/, '').replace(/\/lovelace.*$/, '');
 
-  // ---------- Client WebSocket Home Assistant ----------
-  let STATES = {};
-  let SCHEDULE = null;
+  // ---------- Client WebSocket ----------
   let ws = null, msgId = 1, pending = {}, retry = 0, retryTimer = null, wantConnected = false;
-  let connState = 'idle'; // idle | connecting | ok | ko | auth
+  let connState = 'idle';
+  let IS_ADMIN = false, REGISTRY = null, CARS = [], CAR = null, SCHEDULE = null, discovered = false;
 
   function setConn(s, text) {
     connState = s;
-    const d = $('#conn');
-    d.className = 'dot' + (s === 'ok' ? ' ok' : (s === 'ko' || s === 'auth') ? ' ko' : '');
+    $('#conn').className = 'dot' + (s === 'ok' ? ' ok' : (s === 'ko' || s === 'auth') ? ' ko' : '');
     if (text) $('#sync').textContent = text;
   }
 
@@ -146,9 +133,7 @@
       pending[id] = { resolve, reject, sub: !!msg._sub, onEvent: msg._onEvent };
       delete msg._sub; delete msg._onEvent;
       ws.send(JSON.stringify(Object.assign({ id }, msg)));
-      if (!pending[id].sub) {
-        setTimeout(() => { if (pending[id]) { delete pending[id]; reject(new Error('Pas de réponse de Home Assistant')); } }, 20000);
-      }
+      if (!pending[id].sub) setTimeout(() => { if (pending[id]) { delete pending[id]; reject(new Error('Pas de réponse de Home Assistant')); } }, 20000);
     });
   }
 
@@ -159,93 +144,113 @@
     if (ws && (ws.readyState === 0 || ws.readyState === 1)) return;
     setConn('connecting', 'Connexion…');
     let sock;
-    try {
-      sock = new WebSocket(cleanUrl(cfg.url).replace(/^http/i, 'ws') + '/api/websocket');
-    } catch (e) {
-      setConn('ko', 'Adresse invalide');
-      return;
-    }
+    try { sock = new WebSocket(cleanUrl(cfg.url).replace(/^http/i, 'ws') + '/api/websocket'); }
+    catch (e) { setConn('ko', 'Adresse invalide'); return; }
     ws = sock;
-    sock.onmessage = (ev) => {
-      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
-      const msgs = Array.isArray(m) ? m : [m];
-      msgs.forEach(handle);
-    };
+    sock.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } (Array.isArray(m) ? m : [m]).forEach(handle); };
     sock.onclose = () => {
       if (ws !== sock) return;
       Object.values(pending).forEach((p) => p.reject && p.reject(new Error('Connexion perdue')));
-      pending = {};
-      ws = null;
+      pending = {}; ws = null;
       if (connState === 'auth') return;
       setConn('ko', 'Hors ligne · nouvelle tentative…');
-      if (wantConnected) {
-        const delay = Math.min(30000, 1000 * Math.pow(2, retry++));
-        retryTimer = setTimeout(connect, delay);
-      }
+      scheduleRender();
+      if (wantConnected) retryTimer = setTimeout(connect, Math.min(30000, 1000 * Math.pow(2, retry++)));
     };
-    sock.onerror = () => { /* onclose suit */ };
   }
 
   function handle(m) {
-    if (m.type === 'auth_required') {
-      ws.send(JSON.stringify({ type: 'auth', access_token: cfg.token }));
-    } else if (m.type === 'auth_ok') {
-      retry = 0;
-      setConn('ok', 'Connectée');
+    if (m.type === 'auth_required') ws.send(JSON.stringify({ type: 'auth', access_token: cfg.token }));
+    else if (m.type === 'auth_ok') {
+      retry = 0; setConn('ok', 'Connectée');
       ws.send(JSON.stringify({ id: msgId++, type: 'supported_features', features: { coalesce_messages: 1 } }));
-      startSubscriptions();
+      discover();
     } else if (m.type === 'auth_invalid') {
-      setConn('auth', 'Jeton refusé');
-      wantConnected = false;
+      setConn('auth', 'Jeton refusé'); wantConnected = false;
       try { ws.close(); } catch (e) { }
       toast('Jeton refusé par Home Assistant : vérifie les réglages.', true);
       if (!$('.setup')) showSetup();
     } else if (m.type === 'result') {
-      const p = pending[m.id];
-      if (!p) return;
+      const p = pending[m.id]; if (!p) return;
       if (!m.success) { delete pending[m.id]; p.reject(new Error((m.error && m.error.message) || 'Erreur Home Assistant')); return; }
       if (!p.sub) delete pending[m.id];
       p.resolve(m.result);
     } else if (m.type === 'event') {
-      const p = pending[m.id];
-      if (p && p.onEvent) p.onEvent(m.event);
+      const p = pending[m.id]; if (p && p.onEvent) p.onEvent(m.event);
     }
   }
 
-  function startSubscriptions() {
-    STATES = {};
-    send({
-      type: 'subscribe_entities', entity_ids: ALL_IDS, _sub: true,
-      _onEvent: (ev) => { applyEntities(ev); scheduleRender(); },
-    }).catch((e) => toast(e.message, true));
+  // ---------- Découverte de la voiture et des aides ----------
+  async function discover() {
+    try { const u = await send({ type: 'auth/current_user' }); IS_ADMIN = !!(u && u.is_admin); } catch (e) { IS_ADMIN = false; }
+    let reg;
+    try { reg = await send({ type: 'config/entity_registry/list_for_display' }); }
+    catch (e) { toast('Impossible de lire la liste des entités : ' + e.message, true); return; }
+    REGISTRY = new Set();
+    const byDevice = {};
+    (reg.entities || []).forEach((x) => {
+      REGISTRY.add(x.ei);
+      if (x.pl === 'toyota' && x.tk && TK[x.tk]) {
+        const d = x.di || 'sans-appareil';
+        (byDevice[d] = byDevice[d] || {})[TK[x.tk]] = x.ei;
+      }
+    });
+    CARS = Object.entries(byDevice).map(([di, roles]) => ({ di, roles })).filter((c) => c.roles.batt || c.roles.charge || c.roles.lock || c.roles.odo);
+    CAR = CARS.find((c) => c.di === LS.get('car')) || CARS[0] || null;
+    resolveRoles();
+    discovered = true;
+    subscribe();
     loadSchedule();
-    loadCharts();
+    loadCharts(true);
+    scheduleRender();
   }
 
-  // Format compressé de subscribe_entities
-  function applyEntities(ev) {
-    if (ev.a) {
-      for (const [id, s] of Object.entries(ev.a)) {
-        STATES[id] = {
-          entity_id: id, state: s.s, attributes: s.a || {},
-          last_changed: tsIso(s.lc), last_updated: tsIso(s.lu !== undefined ? s.lu : s.lc),
-        };
-      }
+  function resolveRoles() {
+    E = Object.assign({}, CAR ? CAR.roles : {});
+    for (const [role, cands] of Object.entries(HELPERS)) {
+      const found = cands.find((id) => REGISTRY.has(id));
+      if (found) E[role] = found;
     }
-    if (ev.c) {
-      for (const [id, diff] of Object.entries(ev.c)) {
-        const cur = STATES[id] || { entity_id: id, state: undefined, attributes: {} };
-        const plus = diff['+'];
-        if (plus) {
-          if (plus.s !== undefined) cur.state = plus.s;
-          if (plus.a) cur.attributes = Object.assign({}, cur.attributes, plus.a);
-          if (plus.lc !== undefined) { cur.last_changed = tsIso(plus.lc); cur.last_updated = cur.last_changed; }
-          if (plus.lu !== undefined) cur.last_updated = tsIso(plus.lu);
-        }
-        const minus = diff['-'];
-        if (minus && minus.a) { cur.attributes = Object.assign({}, cur.attributes); minus.a.forEach((k) => delete cur.attributes[k]); }
-        STATES[id] = cur;
+    const savedOut = LS.get('outside', null);
+    if (savedOut) E.outside = savedOut;
+    else if (savedOut === null) {
+      E.outside = OUTSIDE_GUESS.find((id) => REGISTRY.has(id)) || [...REGISTRY].find((id) => id.startsWith('weather.')) || undefined;
+    }
+    const savedTar = LS.get('tariff', null);
+    if (savedTar) E.tariff = savedTar;
+    else if (savedTar === null) E.tariff = TARIFF_GUESS.find((id) => REGISTRY.has(id));
+  }
+  const planReady = () => PLAN_ROLES.every((r) => E[r]);
+  const costReady = () => COST_ROLES.every((r) => E[r]);
+
+  let subPromise = null, subId = null;
+  function subscribe() {
+    if (subId) { send({ type: 'unsubscribe_events', subscription: subId }).catch(() => { }); delete pending[subId]; }
+    STATES = {};
+    const ids = [...new Set(Object.values(E).filter(Boolean))];
+    if (!ids.length) return;
+    const myId = msgId; // id attribué par send()
+    subPromise = send({ type: 'subscribe_entities', entity_ids: ids, _sub: true, _onEvent: (ev) => { applyEntities(ev); scheduleRender(); } })
+      .catch((e) => toast(e.message, true));
+    subId = myId;
+  }
+
+  function applyEntities(ev) {
+    if (ev.a) for (const [id, s] of Object.entries(ev.a)) {
+      STATES[id] = { entity_id: id, state: s.s, attributes: s.a || {}, last_changed: tsIso(s.lc), last_updated: tsIso(s.lu !== undefined ? s.lu : s.lc) };
+    }
+    if (ev.c) for (const [id, diff] of Object.entries(ev.c)) {
+      const cur = STATES[id] || { entity_id: id, state: undefined, attributes: {} };
+      const plus = diff['+'];
+      if (plus) {
+        if (plus.s !== undefined) cur.state = plus.s;
+        if (plus.a) cur.attributes = Object.assign({}, cur.attributes, plus.a);
+        if (plus.lc !== undefined) { cur.last_changed = tsIso(plus.lc); cur.last_updated = cur.last_changed; }
+        if (plus.lu !== undefined) cur.last_updated = tsIso(plus.lu);
       }
+      const minus = diff['-'];
+      if (minus && minus.a) { cur.attributes = Object.assign({}, cur.attributes); minus.a.forEach((k) => delete cur.attributes[k]); }
+      STATES[id] = cur;
     }
     if (ev.r) ev.r.forEach((id) => delete STATES[id]);
   }
@@ -254,63 +259,182 @@
   function callService(domain, service, entityId, data, okMsg) {
     return send({ type: 'call_service', domain, service, service_data: data || {}, target: entityId ? { entity_id: entityId } : undefined })
       .then(() => { if (okMsg) toast(okMsg); })
-      .catch((e) => toast(e.message, true));
+      .catch((e) => { toast(e.message, true); throw e; });
   }
+  const quiet = (p) => p.catch(() => { });
 
+  // ---------- Jours de départ (aide « planning ») ----------
   function loadSchedule() {
+    if (!E.days || !IS_ADMIN) { SCHEDULE = null; return Promise.resolve(); }
+    const sid = E.days.split('.')[1];
     return send({ type: 'schedule/list' }).then((list) => {
-      SCHEDULE = (list || []).find((x) => x.id === 'chr_jours_de_depart') || null;
-      scheduleRender();
+      SCHEDULE = (list || []).find((x) => x.id === sid) || null; scheduleRender();
     }).catch(() => { SCHEDULE = null; });
   }
-
   function toggleDay(day) {
-    if (!SCHEDULE) { toast('Jours indisponibles (droits administrateur nécessaires)', true); return; }
+    if (!SCHEDULE) { toast('Il faut un compte administrateur Home Assistant pour changer les jours', true); return; }
     const upd = { type: 'schedule/update', schedule_id: SCHEDULE.id, name: SCHEDULE.name };
     if (SCHEDULE.icon) upd.icon = SCHEDULE.icon;
     DAYS.forEach(([d]) => { upd[d] = (SCHEDULE[d] || []).map((b) => ({ from: b.from.slice(0, 5), to: b.to.slice(0, 5) })); });
     upd[day] = upd[day].length ? [] : [{ from: '00:00', to: '24:00' }];
     SCHEDULE = Object.assign({}, SCHEDULE, { [day]: upd[day] });
     scheduleRender();
-    send(upd).then(() => { toast('Jours de départ enregistrés'); loadSchedule(); })
-      .catch((e) => { toast(e.message, true); loadSchedule(); });
+    send(upd).then(() => { toast('Jours de départ enregistrés'); loadSchedule(); }).catch((e) => { toast(e.message, true); loadSchedule(); });
   }
 
-  // ---------- Graphiques (historique) ----------
+  // ---------- Installation dans Home Assistant ----------
+  async function rest(method, path, body) {
+    const r = await fetch(cleanUrl(cfg.url) + path, {
+      method, headers: { Authorization: 'Bearer ' + cfg.token, 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!r.ok) throw new Error(`Home Assistant a refusé (${r.status}) ${path}`);
+    return r.json().catch(() => ({}));
+  }
+  async function createHelper(role, domain, fields) {
+    if (E[role]) return E[role];
+    const res = await send(Object.assign({ type: `${domain}/create` }, fields));
+    const id = `${domain}.${res.id}`;
+    E[role] = id; REGISTRY.add(id);
+    return id;
+  }
+  const hvacOn = () => (attr('climate', 'hvac_modes') || ['heat_cool']).find((m) => m !== 'off') || 'heat_cool';
+  const hasPresets = () => (attr('climate', 'preset_modes') || []).length > 0;
+
+  async function installPlanner() {
+    if (!E.climate) { toast("Cette voiture n'a pas de clim pilotable", true); return; }
+    toast('Installation du planificateur…');
+    try {
+      await createHelper('planOn', 'input_boolean', { name: 'CHRplus préchauffage actif', icon: 'mdi:car-clock' });
+      const dep = await createHelper('depart', 'input_datetime', { name: 'CHRplus heure de départ', has_time: true, has_date: false, icon: 'mdi:clock-outline' });
+      const lead = await createHelper('lead', 'input_number', { name: 'CHRplus avance préchauffage', min: 5, max: 30, step: 5, unit_of_measurement: 'min', mode: 'slider', icon: 'mdi:timer-play-outline' });
+      const tgt = await createHelper('target', 'input_number', { name: 'CHRplus consigne préchauffage', min: 18, max: 29, step: 1, unit_of_measurement: '°C', mode: 'slider', icon: 'mdi:thermometer-auto' });
+      const thr = await createHelper('threshold', 'input_number', { name: 'CHRplus seuil température extérieure', min: -10, max: 25, step: 1, unit_of_measurement: '°C', mode: 'slider', icon: 'mdi:snowflake-thermometer' });
+      const def = await createHelper('defrost', 'input_select', { name: 'CHRplus dégivrage', options: DEFROST, icon: 'mdi:car-defrost-front' });
+      const full = [{ from: '00:00', to: '24:00' }];
+      const days = await createHelper('days', 'schedule', { name: 'CHRplus jours de départ', icon: 'mdi:calendar-week', monday: full, tuesday: full, wednesday: full, thursday: full, friday: full, saturday: [], sunday: [] });
+      // Valeurs de départ
+      await quiet(callService('input_datetime', 'set_datetime', dep, { time: '07:30:00' }));
+      await quiet(callService('input_number', 'set_value', lead, { value: 15 }));
+      await quiet(callService('input_number', 'set_value', tgt, { value: 21 }));
+      await quiet(callService('input_number', 'set_value', thr, { value: 5 }));
+      await quiet(callService('input_select', 'select_option', def, { option: 'Avant + arrière' }));
+
+      if (!E.planAuto) {
+        const conditions = [
+          { condition: 'state', entity_id: E.planOn, state: 'on' },
+          { condition: 'state', entity_id: days, state: 'on' },
+          { condition: 'time', before: dep },
+        ];
+        if (E.outside) {
+          const c = { condition: 'numeric_state', entity_id: E.outside, below: thr };
+          if (E.outside.startsWith('weather.')) c.attribute = 'temperature';
+          conditions.push(c);
+        }
+        const actions = [{ action: 'climate.set_temperature', target: { entity_id: E.climate }, data: { temperature: `{{ states('${tgt}') | int(21) }}` } }];
+        if (hasPresets()) actions.push({ action: 'climate.set_preset_mode', target: { entity_id: E.climate }, continue_on_error: true,
+          data: { preset_mode: `{{ ${JSON.stringify(DEFROST_PRESET)}.get(states('${def}'), 'none') }}` } });
+        actions.push({ action: 'climate.set_hvac_mode', target: { entity_id: E.climate }, data: { hvac_mode: hvacOn() } });
+        await rest('POST', '/api/config/automation/config/chrplus_prechauffage', {
+          alias: 'CHRplus préchauffage',
+          description: "Créée par l'appli CHR+. Les jours cochés, lance la clim de la voiture X min avant l'heure de départ s'il fait plus froid que le seuil. Réglages dans l'appli.",
+          triggers: [{ trigger: 'template', value_template: `{{ now() >= today_at(states('${dep}')) - timedelta(minutes=states('${lead}') | int(15)) }}` }],
+          conditions, actions, mode: 'single',
+        });
+      }
+      toast('Planificateur installé ✅');
+      setTimeout(discover, 1500);
+    } catch (e) {
+      toast('Installation interrompue : ' + e.message, true);
+      setTimeout(discover, 800);
+    }
+  }
+
+  async function installCosts() {
+    if (!E.charge || !E.batt) { toast("L'état de charge de la voiture n'est pas disponible", true); return; }
+    toast('Installation du suivi des coûts…');
+    try {
+      const box = (name, min, max, step, unit, icon) => ({ name, min, max, step, unit_of_measurement: unit, mode: 'box', icon });
+      const cap = await createHelper('capacity', 'input_number', box('CHRplus capacité batterie', 10, 150, 0.1, 'kWh', 'mdi:car-battery'));
+      const price = await createHelper('priceKwh', 'input_number', box('CHRplus prix du kWh', 0, 2, 0.0001, '€/kWh', 'mdi:currency-eur'));
+      const start = await createHelper('battStart', 'input_number', box('CHRplus batterie début de charge', 0, 100, 1, '%', 'mdi:battery-arrow-up'));
+      const cLast = await createHelper('costLast', 'input_number', box('CHRplus coût dernière recharge', 0, 1000, 0.01, '€', 'mdi:cash'));
+      const kLast = await createHelper('kwhLast', 'input_number', box('CHRplus énergie dernière recharge', 0, 300, 0.01, 'kWh', 'mdi:lightning-bolt-outline'));
+      const cMonth = await createHelper('costMonth', 'input_number', box('CHRplus coût recharges du mois', 0, 10000, 0.01, '€', 'mdi:cash-multiple'));
+      const kMonth = await createHelper('kwhMonth', 'input_number', box('CHRplus énergie recharges du mois', 0, 10000, 0.01, 'kWh', 'mdi:lightning-bolt'));
+      await quiet(callService('input_number', 'set_value', cap, { value: 60 }));
+      await quiet(callService('input_number', 'set_value', price, { value: 0.2 }));
+      if (!E.costAuto) {
+        const B = E.batt, C = E.charge;
+        const add = (id, v) => ({ action: 'input_number.set_value', target: { entity_id: id }, data: { value: `{{ (states('${id}') | float(0) + ${v}) | round(2) }}` } });
+        await rest('POST', '/api/config/automation/config/chrplus_suivi_des_couts', {
+          alias: 'CHRplus suivi des coûts',
+          description: "Créée par l'appli CHR+. Estime l'énergie et le coût de chaque recharge d'après le % gagné, la capacité de la batterie (~10 % de pertes) et le prix du kWh. Cumule sur le mois.",
+          triggers: [
+            { trigger: 'state', entity_id: C, to: 'charging', id: 'debut' },
+            { trigger: 'state', entity_id: C, from: 'charging', not_to: ['unavailable', 'unknown'], id: 'fin' },
+            { trigger: 'time', at: '00:00:05', id: 'minuit' },
+          ],
+          conditions: [],
+          actions: [{ choose: [
+            { conditions: [{ condition: 'trigger', id: 'debut' }],
+              sequence: [{ action: 'input_number.set_value', target: { entity_id: start }, data: { value: `{{ states('${B}') | int(0) }}` } }] },
+            { conditions: [{ condition: 'trigger', id: 'fin' }],
+              sequence: [
+                { variables: { gain: `{{ [states('${B}') | int(0) - states('${start}') | int(0), 0] | max }}` } },
+                { variables: { kwh: `{{ (gain / 100 * states('${cap}') | float(0) / 0.9) | round(2) }}` } },
+                { variables: { cout: `{{ (kwh * states('${price}') | float(0)) | round(2) }}` } },
+                { if: [{ condition: 'template', value_template: '{{ gain > 0 }}' }], then: [
+                  { action: 'input_number.set_value', target: { entity_id: kLast }, data: { value: '{{ kwh }}' } },
+                  { action: 'input_number.set_value', target: { entity_id: cLast }, data: { value: '{{ cout }}' } },
+                  add(kMonth, 'kwh'), add(cMonth, 'cout'),
+                ] },
+              ] },
+            { conditions: [{ condition: 'trigger', id: 'minuit' }, { condition: 'template', value_template: '{{ now().day == 1 }}' }],
+              sequence: [{ action: 'input_number.set_value', target: { entity_id: [kMonth, cMonth] }, data: { value: 0 } }] },
+          ] }],
+          mode: 'queued',
+        });
+      }
+      toast('Suivi des coûts installé ✅ — règle la capacité et le prix du kWh');
+      setTimeout(discover, 1500);
+    } catch (e) {
+      toast('Installation interrompue : ' + e.message, true);
+      setTimeout(discover, 800);
+    }
+  }
+
+  // ---------- Graphiques ----------
   let CHART = { batt: null, km: null, at: 0 };
   function loadCharts(force) {
-    if (!force && Date.now() - CHART.at < 5 * 60 * 1000 && CHART.batt) return;
+    if (!discovered) return;
+    if (!force && Date.now() - CHART.at < 5 * 60 * 1000) return;
     CHART.at = Date.now();
     const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 86400000);
-    send({
-      type: 'history/history_during_period', start_time: weekAgo.toISOString(), end_time: now.toISOString(),
+    if (E.batt) send({
+      type: 'history/history_during_period', start_time: new Date(now.getTime() - 7 * 86400000).toISOString(), end_time: now.toISOString(),
       entity_ids: [E.batt], minimal_response: true, no_attributes: true, significant_changes_only: false,
     }).then((r) => {
-      const rows = (r && r[E.batt]) || [];
-      CHART.batt = rows.map((x) => ({ t: (x.lu || x.lc) * 1000, v: parseFloat(x.s) })).filter((p) => !isNaN(p.v) && !isNaN(p.t));
+      CHART.batt = ((r && r[E.batt]) || []).map((x) => ({ t: (x.lu || x.lc) * 1000, v: parseFloat(x.s) })).filter((p) => !isNaN(p.v) && !isNaN(p.t));
       scheduleRender();
-    }).catch(() => { });
-    const start = new Date(now.getTime() - 30 * 86400000); start.setHours(0, 0, 0, 0);
-    send({
-      type: 'recorder/statistics_during_period', start_time: start.toISOString(), period: 'day',
-      statistic_ids: [E.odo], types: ['change'],
-    }).then((r) => {
-      const rows = (r && r[E.odo]) || [];
-      CHART.km = rows.map((x) => ({ t: typeof x.start === 'number' ? x.start : new Date(x.start).getTime(), v: x.change }))
-        .filter((p) => p.v !== null && !isNaN(p.v));
-      scheduleRender();
-    }).catch(() => { });
+    }).catch(() => { CHART.batt = []; });
+    if (E.odo) {
+      const start = new Date(now.getTime() - 30 * 86400000); start.setHours(0, 0, 0, 0);
+      send({ type: 'recorder/statistics_during_period', start_time: start.toISOString(), period: 'day', statistic_ids: [E.odo], types: ['change'] })
+        .then((r) => {
+          CHART.km = ((r && r[E.odo]) || []).map((x) => ({ t: typeof x.start === 'number' ? x.start : new Date(x.start).getTime(), v: x.change }))
+            .filter((p) => p.v !== null && p.v !== undefined && !isNaN(p.v));
+          scheduleRender();
+        }).catch(() => { CHART.km = []; });
+    }
   }
 
-  function lineChart(points, opts = {}) {
+  function lineChart(points) {
     if (!points || points.length < 2) return `<div class="muted small center">${points ? 'Pas assez de données pour le graphique' : 'Chargement…'}</div>`;
-    const W = 340, H = 150, pl = 28, pr = 6, pt = 8, pb = 20;
+    const W = 340, H = 150, pl = 28, pr = 6, pt = 8, pb = 20, min = 0, max = 100;
     const t0 = points[0].t, t1 = Date.now();
-    const min = opts.min ?? 0, max = opts.max ?? 100;
     const x = (t) => pl + ((t - t0) / (t1 - t0 || 1)) * (W - pl - pr);
-    const y = (v) => pt + (1 - (v - min) / (max - min || 1)) * (H - pt - pb);
-    // escalier : la valeur reste jusqu'au point suivant
+    const y = (v) => pt + (1 - (v - min) / (max - min)) * (H - pt - pb);
     let d = `M${x(points[0].t).toFixed(1)},${y(points[0].v).toFixed(1)}`;
     for (let i = 1; i < points.length; i++) d += ` H${x(points[i].t).toFixed(1)} V${y(points[i].v).toFixed(1)}`;
     d += ` H${x(t1).toFixed(1)}`;
@@ -331,48 +455,52 @@
   function barChart(points) {
     if (!points) return '<div class="muted small center">Chargement…</div>';
     if (!points.length) return '<div class="muted small center">Pas encore de statistiques</div>';
-    const W = 340, H = 150, pl = 26, pb = 18, pt = 8;
+    const W = 340, H = 150, pl = 26, pb = 18, pt = 8, n = 30, bw = (W - pl) / n;
     const max = Math.max(10, ...points.map((p) => p.v)) * 1.1;
-    const n = 30, bw = (W - pl) / n;
     const today = new Date(); today.setHours(0, 0, 0, 0);
     let bars = '';
     points.forEach((p) => {
       const d = new Date(p.t); d.setHours(0, 0, 0, 0);
       const idx = n - 1 - Math.round((today - d) / 86400000);
       if (idx < 0 || idx >= n) return;
-      const h = (p.v / max) * (H - pb - pt);
-      bars += `<rect x="${(pl + idx * bw + 1).toFixed(1)}" y="${(H - pb - h).toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${idx === n - 1 ? '#FF8A4C' : '#5AB8FF'}"><title>${Math.round(p.v)} km</title></rect>`;
+      const h = (Math.max(0, p.v) / max) * (H - pb - pt);
+      bars += `<rect x="${(pl + idx * bw + 1).toFixed(1)}" y="${(H - pb - h).toFixed(1)}" width="${(bw - 2).toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${idx === n - 1 ? '#FF8A4C' : '#5AB8FF'}"/>`;
     });
-    const mid = Math.round(max / 2 / 10) * 10;
+    const mid = Math.max(10, Math.round(max / 2 / 10) * 10);
+    const ym = H - pb - (mid / max) * (H - pb - pt);
     return `<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
       <line x1="${pl}" x2="${W}" y1="${H - pb}" y2="${H - pb}" stroke="#2A3340"/>
-      <line x1="${pl}" x2="${W}" y1="${H - pb - (mid / max) * (H - pb - pt)}" y2="${H - pb - (mid / max) * (H - pb - pt)}" stroke="#2A3340" stroke-dasharray="3 3"/>
-      <text x="0" y="${H - pb - (mid / max) * (H - pb - pt) + 3}">${mid}</text>
+      <line x1="${pl}" x2="${W}" y1="${ym}" y2="${ym}" stroke="#2A3340" stroke-dasharray="3 3"/><text x="0" y="${ym + 3}">${mid}</text>
       ${bars}<text x="${pl}" y="${H - 4}">il y a 30 j</text><text x="${W - 2}" y="${H - 4}" text-anchor="end">aujourd'hui</text></svg>`;
   }
 
   // ---------- Rendu ----------
-  let tab = 'voiture';
-  let renderQueued = false;
+  let tab = 'voiture', renderQueued = false;
   function scheduleRender() {
     if (renderQueued) return;
     renderQueued = true;
     requestAnimationFrame(() => { renderQueued = false; render(); });
   }
-
   function render() {
     if ($('.setup')) return;
     const a = document.activeElement;
-    // Ne pas écraser un champ en cours de saisie
     if (a && $('#view').contains(a) && a.tagName === 'INPUT' && a.type !== 'checkbox') { setTimeout(scheduleRender, 800); return; }
     const y = window.scrollY;
-    const f = { voiture: viewCar, prechauffage: viewHeat, recharge: viewCharge, trajets: viewTrips }[tab];
-    $('#view').innerHTML = (connState !== 'ok' && !Object.keys(STATES).length) ? viewWaiting() : f();
+    let html;
+    if (!discovered) html = viewWaiting();
+    else if (!CAR) html = viewNoCar();
+    else html = { voiture: viewCar, prechauffage: viewHeat, recharge: viewCharge, trajets: viewTrips }[tab]();
+    $('#view').innerHTML = html;
     window.scrollTo(0, y);
-    const r = st(E.reported);
-    $('#sync').textContent = connState === 'ok'
-      ? (r && has(E.reported) ? `Vue par la voiture ${ago(r.state)}` : 'Connectée')
-      : $('#sync').textContent;
+    if (connState === 'ok') $('#sync').textContent = has('reported') ? `Vue par la voiture ${ago(val('reported'))}` : 'Connectée';
+    $('#car-name').textContent = carName(CAR);
+  }
+  function carName(c) {
+    if (!c) return 'CHR+';
+    const s = c.roles.vin && STATES[c.roles.vin];
+    const fn = STATES[c.roles.batt || c.roles.lock || c.roles.odo];
+    const n = fn && fn.attributes && fn.attributes.friendly_name ? fn.attributes.friendly_name.split(' ')[0] : '';
+    return n && n.length > 1 && n.length < 16 ? n : (s && s.state && s.state.length > 6 ? 'VIN …' + s.state.slice(-6) : 'Ma Toyota');
   }
 
   function viewWaiting() {
@@ -380,368 +508,366 @@
       <p class="muted small">Adresse : ${esc(cleanUrl(cfg.url) || '—')}</p>
       <button class="btn" data-act="settings">Réglages de connexion</button></div>`;
   }
+  function viewNoCar() {
+    return `<div class="card"><h2>Aucune voiture trouvée</h2>
+      <p>CHR+ s'appuie sur l'intégration <strong>Toyota EU community</strong> de Home Assistant, et aucune voiture n'y a été trouvée.</p>
+      <p class="muted small">Installe-la depuis le Marketplace (ou HACS), connecte ton compte MyToyota, puis rouvre l'appli.</p>
+      <button class="btn" data-act="rediscover">⟳ Chercher à nouveau</button></div>`;
+  }
 
   function ring(pct, color) {
     const r = 54, c = 2 * Math.PI * r, p = Math.max(0, Math.min(100, pct || 0));
-    return `<svg width="130" height="130" viewBox="0 0 130 130">
-      <circle cx="65" cy="65" r="${r}" fill="none" stroke="#2A3340" stroke-width="12"/>
-      <circle cx="65" cy="65" r="${r}" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round"
-        stroke-dasharray="${(c * p / 100).toFixed(1)} ${c.toFixed(1)}"/></svg>`;
+    return `<svg width="130" height="130" viewBox="0 0 130 130"><circle cx="65" cy="65" r="${r}" fill="none" stroke="#2A3340" stroke-width="12"/>
+      <circle cx="65" cy="65" r="${r}" fill="none" stroke="${color}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${(c * p / 100).toFixed(1)} ${c.toFixed(1)}"/></svg>`;
   }
-
   function chargePill() {
-    const s = val(E.charge);
+    if (!E.charge) return '';
+    const s = val('charge');
     const [l, c] = CHARGE_LABEL[s] || [s || '—', ''];
     return `<span class="pill ${c}">${s === 'charging' ? '⚡ ' : ''}${esc(l)}</span>`;
   }
-
   function carSvg() {
-    const o = (k) => (val(OPENINGS[k]) === 'on' ? ' open' : '');
+    const o = (k) => (val(k) === 'on' ? ' open' : '');
     return `<svg class="car-svg" width="120" height="210" viewBox="0 0 120 210">
       <rect x="18" y="8" width="84" height="194" rx="30" fill="#1E2530" stroke="#4A5566" stroke-width="1.5"/>
       <path class="part${o('hood')}" d="M26,22 Q60,6 94,22 L92,56 L28,56 Z"/>
-      <path class="glass${o('winFL')}" d="M30,62 L58,62 L58,92 L30,96 Z"/>
-      <path class="glass${o('winFR')}" d="M62,62 L90,62 L90,96 L62,92 Z"/>
-      <path class="glass${o('winRL')}" d="M30,104 L58,100 L58,132 L30,132 Z"/>
-      <path class="glass${o('winRR')}" d="M62,100 L90,104 L90,132 L62,132 Z"/>
-      <rect class="part${o('doorFL')}" x="10" y="62" width="9" height="40" rx="3"/>
-      <rect class="part${o('doorFR')}" x="101" y="62" width="9" height="40" rx="3"/>
-      <rect class="part${o('doorRL')}" x="10" y="106" width="9" height="36" rx="3"/>
-      <rect class="part${o('doorRR')}" x="101" y="106" width="9" height="36" rx="3"/>
-      <path class="part${o('trunk')}" d="M28,150 L92,150 L94,186 Q60,200 26,186 Z"/>
-    </svg>`;
+      <path class="glass${o('winFL')}" d="M30,62 L58,62 L58,92 L30,96 Z"/><path class="glass${o('winFR')}" d="M62,62 L90,62 L90,96 L62,92 Z"/>
+      <path class="glass${o('winRL')}" d="M30,104 L58,100 L58,132 L30,132 Z"/><path class="glass${o('winRR')}" d="M62,100 L90,104 L90,132 L62,132 Z"/>
+      <rect class="part${o('doorFL')}" x="10" y="62" width="9" height="40" rx="3"/><rect class="part${o('doorFR')}" x="101" y="62" width="9" height="40" rx="3"/>
+      <rect class="part${o('doorRL')}" x="10" y="106" width="9" height="36" rx="3"/><rect class="part${o('doorRR')}" x="101" y="106" width="9" height="36" rx="3"/>
+      <path class="part${o('trunk')}" d="M28,150 L92,150 L94,186 Q60,200 26,186 Z"/></svg>`;
   }
+  const line = (k, v) => `<div class="line"><span class="k">${k}</span><span class="v">${v}</span></div>`;
 
   function viewCar() {
-    const batt = num(E.batt);
-    const locked = val(E.lock) === 'locked';
-    const openList = Object.entries(OPENINGS).filter(([, id]) => val(id) === 'on');
-    const names = { doorFL: 'Porte conducteur', doorFR: 'Porte passager', doorRL: 'Porte AR gauche', doorRR: 'Porte AR droite',
-      winFL: 'Vitre conducteur', winFR: 'Vitre passager', winRL: 'Vitre AR gauche', winRR: 'Vitre AR droite', trunk: 'Coffre', hood: 'Capot' };
-    const lat = attr(E.tracker, 'latitude'), lon = attr(E.tracker, 'longitude');
-    const where = val(E.tracker) === 'home' ? 'À la maison' : (val(E.tracker) === 'not_home' ? 'Hors de la maison' : (val(E.tracker) || '—'));
-    const health = val(E.health);
-    const warn = num(E.warnings, 0);
+    const batt = num('batt');
+    const openList = OPEN_ROLES.filter((r) => E[r] && val(r) === 'on');
+    const knownOpenings = OPEN_ROLES.some((r) => E[r]);
+    const lat = attr('tracker', 'latitude'), lon = attr('tracker', 'longitude');
+    const tr = val('tracker');
+    const where = tr === 'home' ? 'À la maison' : tr === 'not_home' ? 'Hors de la maison' : (tr || '—');
+    const warn = num('warnings', 0);
     const battColor = batt === null ? '#4A5566' : batt < 20 ? '#FF5D6C' : batt < 40 ? '#FFC857' : '#3DDC97';
+    const fuel = has('fuel') ? num('fuel') : null;
     return `
-      <section class="card">
-        <div class="hero">
-          <div class="ring">${ring(batt, battColor)}<div class="lbl"><div class="pct">${fmt(batt)}%</div><div class="cap">batterie</div></div></div>
-          <div>
-            <div class="big">${fmt(num(E.range))}<small> km</small></div>
-            <div class="muted small">${fmt(num(E.rangeAc))} km avec la clim</div>
-            <div style="margin-top:10px">${chargePill()}</div>
-          </div>
-        </div>
+      <section class="card"><div class="hero">
+        <div class="ring">${ring(batt ?? fuel, battColor)}<div class="lbl"><div class="pct">${fmt(batt ?? fuel)}%</div><div class="cap">${batt !== null ? 'batterie' : 'carburant'}</div></div></div>
+        <div>
+          <div class="big">${fmt(num('range') ?? num('fuelRange'))}<small> km</small></div>
+          ${E.rangeAc ? `<div class="muted small">${fmt(num('rangeAc'))} km avec la clim</div>` : ''}
+          <div style="margin-top:10px">${chargePill()}</div>
+        </div></div></section>
+
+      ${knownOpenings || E.lock ? `<section class="card">
+        <h2>Ouvrants <small>${E.lock ? (val('lock') === 'locked' ? '<span class="pill g">🔒 Verrouillée</span>' : '<span class="pill r">🔓 Déverrouillée</span>') : ''}</small></h2>
+        <div class="car-wrap">${carSvg()}<div class="legend">
+          ${knownOpenings ? (openList.length
+            ? openList.map((k) => `<div class="line"><span class="k">${OPEN_NAMES[k]}</span><span class="v bad">${k === 'trunk' || k === 'hood' ? 'ouvert' : 'ouverte'}</span></div>`).join('')
+            : '<div class="line"><span class="k">Portes, vitres, coffre, capot</span><span class="v ok">tout est fermé</span></div>') : ''}
+          ${E.lock ? `<div class="row" style="margin-top:10px"><button class="btn" data-act="lock">🔒 Verrouiller</button><button class="btn" data-act="unlock">🔓 Ouvrir</button></div>` : ''}
+        </div></div></section>` : ''}
+
+      <section class="card"><h2>Infos</h2>
+        ${E.odo ? line('Compteur', `${fmt(num('odo'))} km`) : ''}
+        ${fuel !== null && batt !== null ? line('Carburant', `${fmt(fuel)} % · ${fmt(num('fuelRange'))} km`) : ''}
+        ${E.tracker ? line('Position', `${esc(where)}${lat ? ` · <a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}">carte</a>` : ''}`) : ''}
+        ${E.health ? line('État du véhicule', val('health') === 'off' ? '<span class="pill g">OK</span>' : val('health') === 'on' ? '<span class="pill r">Problème</span>' : '—') : ''}
+        ${E.warnings ? line("Voyants d'alerte", warn > 0 ? `<span class="pill r">${warn}</span>` : '<span class="pill g">aucun</span>') : ''}
+        ${E.service ? line('Dernier entretien', has('service') ? dateFr(val('service')) : '—') : ''}
+        ${E.fetched ? line('Dernière synchro', ago(val('fetched'))) : ''}
       </section>
 
-      <section class="card">
-        <h2>Ouvrants <small>${locked ? '<span class="pill g">🔒 Verrouillée</span>' : '<span class="pill r">🔓 Déverrouillée</span>'}</small></h2>
-        <div class="car-wrap">
-          ${carSvg()}
-          <div class="legend">
-            ${openList.length
-              ? openList.map(([k]) => `<div class="line"><span class="k">${names[k]}</span><span class="v bad">${k === 'trunk' || k === 'hood' ? 'ouvert' : 'ouverte'}</span></div>`).join('')
-              : '<div class="line"><span class="k">Portes, vitres, coffre, capot</span><span class="v ok">tout est fermé</span></div>'}
-            <div class="row" style="margin-top:10px">
-              <button class="btn" data-act="lock">🔒 Verrouiller</button>
-              <button class="btn" data-act="unlock">🔓 Ouvrir</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Infos</h2>
-        <div class="line"><span class="k">Compteur</span><span class="v">${fmt(num(E.odo))} km</span></div>
-        <div class="line"><span class="k">Position</span><span class="v">${esc(where)}${lat ? ` · <a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}">carte</a>` : ''}</span></div>
-        <div class="line"><span class="k">État du véhicule</span><span class="v">${health === 'off' ? '<span class="pill g">OK</span>' : health === 'on' ? '<span class="pill r">Problème</span>' : '—'}</span></div>
-        <div class="line"><span class="k">Voyants d'alerte</span><span class="v">${warn > 0 ? `<span class="pill r">${warn}</span>` : '<span class="pill g">aucun</span>'}</span></div>
-        <div class="line"><span class="k">Dernier entretien</span><span class="v">${has(E.service) ? dateFr(val(E.service)) : '—'}</span></div>
-        <div class="line"><span class="k">Dernière synchro</span><span class="v">${ago(val(E.fetched))}</span></div>
-      </section>
-
-      <section class="card">
-        <h2>Commandes</h2>
-        <div class="row">
-          <button class="btn" data-act="horn">📣 Klaxon</button>
-          <button class="btn ${val(E.hazard) === 'on' ? 'warm' : ''}" data-act="hazard">⚠️ Warnings ${val(E.hazard) === 'on' ? 'ON' : ''}</button>
-        </div>
-      </section>`;
+      ${E.horn || E.hazard ? `<section class="card"><h2>Commandes</h2><div class="row">
+        ${E.horn ? '<button class="btn" data-act="horn">📣 Klaxon</button>' : ''}
+        ${E.hazard ? `<button class="btn ${val('hazard') === 'on' ? 'warm' : ''}" data-act="hazard">⚠️ Warnings ${val('hazard') === 'on' ? 'ON' : ''}</button>` : ''}
+      </div></section>` : ''}`;
   }
 
-  function nextDepartureText() {
+  function nextDeparture() {
     if (!SCHEDULE) return null;
     const now = new Date();
-    const dep = (val(E.depart) || '06:30:00').split(':');
-    const startIso = val(E.start);
+    const dep = (val('depart') || '07:30:00').split(':');
+    const lead = num('lead', 15);
     for (let i = 0; i < 8; i++) {
       const d = new Date(now); d.setDate(now.getDate() + i);
-      const key = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][d.getDay()];
-      if (!(SCHEDULE[key] || []).length) continue;
+      if (!(SCHEDULE[DAY_KEYS[d.getDay()]] || []).length) continue;
       d.setHours(+dep[0], +dep[1], 0, 0);
-      if (i === 0) {
-        const s = startIso ? new Date(startIso) : d;
-        if (s <= now) continue;
-      }
+      if (i === 0 && new Date(d.getTime() - lead * 60000) <= now) continue;
       return i === 0 ? "aujourd'hui" : i === 1 ? 'demain' : `${DAY_NAMES[d.getDay()]} ${d.getDate()}/${String(d.getMonth() + 1).padStart(2, '0')}`;
     }
     return 'aucun jour coché';
   }
-
-  function stepper(id, unit, step, min, max) {
-    const v = num(id);
+  function stepper(role, unit, step, min, max, dec = 0) {
     return `<div class="stepper">
-      <button data-step="${id}" data-d="${-step}" data-min="${min}" data-max="${max}" aria-label="moins">−</button>
-      <span class="val">${fmt(v)}${unit}</span>
-      <button data-step="${id}" data-d="${step}" data-min="${min}" data-max="${max}" aria-label="plus">+</button></div>`;
+      <button data-step="${role}" data-d="${-step}" data-min="${min}" data-max="${max}" aria-label="moins">−</button>
+      <span class="val">${fmt(num(role), dec)}${unit}</span>
+      <button data-step="${role}" data-d="${step}" data-min="${min}" data-max="${max}" aria-label="plus">+</button></div>`;
   }
-
-  function seatSeg(id, label) {
-    const cur = val(id);
-    const opts = attr(id, 'options') || ['off', 'low', 'medium', 'high'];
+  function seatSeg(role, label) {
+    if (!E[role]) return '';
+    const cur = val(role);
+    const opts = attr(role, 'options') || ['off', 'low', 'medium', 'high'];
     return `<div><div class="small muted" style="margin-bottom:4px">${label}</div>
-      <div class="seg hot">${opts.map((o) => `<button class="${o === cur ? 'on' : ''}" data-select="${id}" data-opt="${esc(o)}">${SEAT_LABEL[o] || esc(o)}</button>`).join('')}</div></div>`;
+      <div class="seg hot">${opts.map((o) => `<button class="${o === cur ? 'on' : ''}" data-select="${role}" data-opt="${esc(o)}">${SEAT_LABEL[o] || esc(o)}</button>`).join('')}</div></div>`;
+  }
+  function installCard(title, text, act) {
+    return `<section class="card summary off"><h2>${title}</h2><p>${text}</p>
+      ${IS_ADMIN ? `<button class="btn warm" data-act="${act}" style="margin-top:10px">Installer dans Home Assistant</button>
+        <p class="small">Crée quelques réglages et une automatisation dans ton Home Assistant (tout commence par « CHRplus »).</p>`
+        : '<p class="small">Il faut te connecter avec un compte <strong>administrateur</strong> de Home Assistant pour l\'installer.</p>'}</section>`;
   }
 
   function viewHeat() {
-    const cl = st(E.climate);
-    const on = cl && cl.state && cl.state !== 'off' && cl.state !== 'unavailable';
-    const temp = attr(E.climate, 'temperature');
-    const preset = attr(E.climate, 'preset_mode');
-    const presets = attr(E.climate, 'preset_modes') || [];
-    const planOn = val(E.planOn) === 'on';
-    const ext = num(E.outside);
-    const seuil = num(E.threshold, 0);
-    const startIso = val(E.start);
-    const startTxt = startIso && has(E.start) ? hhmm(new Date(startIso)) : '—';
-    const depart = (val(E.depart) || '').slice(0, 5);
-    const next = nextDepartureText();
-    const wouldRun = ext !== null && ext < seuil;
-    const lastRun = attr(E.planAuto, 'last_triggered');
+    if (!E.climate) return '<section class="card"><h2>Préchauffage</h2><p>La clim de cette voiture n\'est pas pilotable depuis Home Assistant.</p></section>';
+    const on = val('climate') && val('climate') !== 'off' && val('climate') !== 'unavailable';
+    const temp = attr('climate', 'temperature');
+    const preset = attr('climate', 'preset_mode');
+    const presets = attr('climate', 'preset_modes') || [];
+    const ext = outsideTemp();
+    const seats = ['seatD', 'seatP', 'seatRD', 'seatRP'].some((r) => E[r]);
+    let plan;
+    if (!planReady()) {
+      plan = installCard('Planificateur de départ', "Programme l'heure de départ et les jours : la clim se lance toute seule avant que tu partes, seulement s'il fait froid. Ça tourne dans Home Assistant, même téléphone éteint.", 'install-plan');
+    } else {
+      const planOn = val('planOn') === 'on';
+      const seuil = num('threshold', 0);
+      const depart = (val('depart') || '').slice(0, 5);
+      let startTxt = '—';
+      if (depart) { const d = new Date(); const [h, m] = depart.split(':'); d.setHours(+h, +m - num('lead', 15), 0, 0); startTxt = hhmm(d); }
+      const wouldRun = ext !== null && ext < seuil;
+      const lastRun = attr('planAuto', 'last_triggered');
+      plan = `
+      <section class="card summary ${planOn ? '' : 'off'}">
+        <h2>Planificateur de départ <label class="switch"><input type="checkbox" data-toggle="planOn" ${planOn ? 'checked' : ''}><span></span></label></h2>
+        ${planOn ? `<div class="big">${esc(depart)}<small> départ · ${esc(nextDeparture() || '…')}</small></div>
+          <p>Clim lancée à <strong>${startTxt}</strong>, ${fmt(num('target'))} °C, dégivrage ${esc((val('defrost') || '').toLowerCase())}.</p>
+          ${E.outside ? `<p>Seulement s'il fait moins de <strong>${fmt(seuil)} °C</strong> dehors — il fait ${fmt(ext, 1)} °C : ${wouldRun ? '<strong>ça se lancerait ❄️</strong>' : 'ça ne se lancerait pas.'}</p>` : '<p>Se lance à chaque départ programmé (aucune température extérieure choisie).</p>'}`
+        : '<p>Désactivé. Active-le pour que la clim chauffe la voiture avant ton départ.</p>'}
+        ${lastRun ? `<p class="small">Dernier préchauffage : ${ago(lastRun)}</p>` : ''}
+      </section>
+      <section class="card"><h2>Réglages du départ</h2>
+        <div class="setting"><div><div class="k">Heure de départ</div></div><input type="time" id="depart-time" value="${esc(depart)}"></div>
+        <div class="setting" style="display:block"><div class="k" style="margin-bottom:8px">Jours de départ</div>
+          <div class="chips">${DAYS.map(([d, l]) => `<button class="chip ${SCHEDULE && (SCHEDULE[d] || []).length ? 'on' : ''}" data-day="${d}">${l}</button>`).join('')}</div>
+          ${SCHEDULE ? '' : `<div class="d" style="margin-top:6px">${IS_ADMIN ? 'Chargement des jours…' : 'Modifiable avec un compte administrateur Home Assistant.'}</div>`}</div>
+        <div class="setting"><div><div class="k">Lancer avant</div><div class="d">minutes avant le départ</div></div>${stepper('lead', ' min', 5, 5, 30)}</div>
+        <div class="setting"><div><div class="k">Température</div></div>${stepper('target', '°C', 1, 18, 29)}</div>
+        ${E.outside ? `<div class="setting"><div><div class="k">Si dehors moins de</div><div class="d">sinon on ne lance pas</div></div>${stepper('threshold', '°C', 1, -10, 25)}</div>` : ''}
+        ${hasPresets() ? `<div class="setting" style="display:block"><div class="k" style="margin-bottom:8px">Dégivrage</div>
+          <div class="seg hot">${DEFROST.map((o) => `<button class="${val('defrost') === o ? 'on' : ''}" data-select="defrost" data-opt="${esc(o)}">${esc(o.replace('Lunette arrière', 'Lunette AR').replace('Avant + arrière', 'Avant + AR'))}</button>`).join('')}</div></div>` : ''}
+      </section>`;
+    }
     return `
       <section class="card">
         <h2>Clim maintenant ${on ? '<span class="pill o">🔥 En marche</span>' : '<span class="pill">À l\'arrêt</span>'}</h2>
         <div class="grid3" style="margin-bottom:12px">
           <div class="stat"><div class="k">Consigne</div><div class="v">${fmt(temp)}<small>°C</small></div></div>
-          <div class="stat"><div class="k">Dehors</div><div class="v">${fmt(ext, 1)}<small>°C</small></div></div>
-          <div class="stat"><div class="k">Habitacle</div><div class="v">${has(E.cabin) ? fmt(num(E.cabin), 1) + '<small>°C</small>' : '—'}</div></div>
+          <div class="stat"><div class="k">Dehors</div><div class="v">${ext !== null ? fmt(ext, 1) + '<small>°C</small>' : '—'}</div></div>
+          <div class="stat"><div class="k">Habitacle</div><div class="v">${has('cabin') ? fmt(num('cabin'), 1) + '<small>°C</small>' : '—'}</div></div>
         </div>
-        <div class="row">
-          <button class="btn warm" data-act="heat-now">▶ Lancer</button>
-          <button class="btn" data-act="heat-stop">■ Arrêter</button>
-        </div>
-        <div class="setting" style="margin-top:6px">
-          <div><div class="k">Température</div><div class="d">Réglage direct de la clim</div></div>
-          <div class="stepper" style="gap:6px">
-            <button data-clim-temp="-1">−</button><span class="val" style="min-width:56px">${fmt(temp)}°</span><button data-clim-temp="1">+</button>
-          </div>
-        </div>
+        <div class="row"><button class="btn warm" data-act="heat-now">▶ Lancer</button><button class="btn" data-act="heat-stop">■ Arrêter</button></div>
+        <div class="setting" style="margin-top:6px"><div><div class="k">Température</div><div class="d">Réglage direct de la clim</div></div>
+          <div class="stepper" style="gap:6px"><button data-clim-temp="-1">−</button><span class="val" style="min-width:56px">${fmt(temp)}°</span><button data-clim-temp="1">+</button></div></div>
         ${presets.length ? `<div style="margin-top:4px"><div class="small muted" style="margin-bottom:4px">Dégivrage</div>
           <div class="seg">${presets.map((p) => `<button class="${p === preset ? 'on' : ''}" data-preset="${esc(p)}">${PRESET_LABEL[p] || esc(p)}</button>`).join('')}</div></div>` : ''}
       </section>
-
-      <section class="card summary ${planOn ? '' : 'off'}">
-        <h2>Planificateur de départ
-          <label class="switch"><input type="checkbox" data-toggle="${E.planOn}" ${planOn ? 'checked' : ''}><span></span></label></h2>
-        ${planOn ? `
-          <div class="big">${esc(depart)}<small> départ · ${esc(next || '…')}</small></div>
-          <p>Clim lancée à <strong>${startTxt}</strong>, ${fmt(num(E.target))} °C, dégivrage ${esc((val(E.defrost) || '').toLowerCase())}.</p>
-          <p>Seulement s'il fait moins de <strong>${fmt(seuil)} °C</strong> dehors — il fait ${fmt(ext, 1)} °C :
-            ${wouldRun ? '<strong>ça se lancerait ❄️</strong>' : 'ça ne se lancerait pas.'}</p>`
-          : '<p>Désactivé. Active-le pour que la clim chauffe la voiture avant ton départ.</p>'}
-        ${lastRun ? `<p class="small">Dernier préchauffage : ${ago(lastRun)}</p>` : ''}
-      </section>
-
-      <section class="card">
-        <h2>Réglages du départ</h2>
-        <div class="setting">
-          <div><div class="k">Heure de départ</div></div>
-          <input type="time" id="depart-time" value="${esc(depart)}">
-        </div>
-        <div class="setting" style="display:block">
-          <div class="k" style="margin-bottom:8px">Jours de départ</div>
-          <div class="chips">${DAYS.map(([d, l]) => `<button class="chip ${SCHEDULE && (SCHEDULE[d] || []).length ? 'on' : ''}" data-day="${d}">${l}</button>`).join('')}</div>
-          ${SCHEDULE ? '' : '<div class="d" style="margin-top:6px">Chargement des jours… (nécessite un compte administrateur)</div>'}
-        </div>
-        <div class="setting"><div><div class="k">Lancer avant</div><div class="d">minutes avant le départ</div></div>${stepper(E.lead, ' min', 5, 5, 30)}</div>
-        <div class="setting"><div><div class="k">Température</div></div>${stepper(E.target, '°C', 1, 18, 29)}</div>
-        <div class="setting"><div><div class="k">Si dehors moins de</div><div class="d">sinon on ne lance pas</div></div>${stepper(E.threshold, '°C', 1, -10, 25)}</div>
-        <div class="setting" style="display:block">
-          <div class="k" style="margin-bottom:8px">Dégivrage</div>
-          <div class="seg hot">${DEFROST.map((o) => `<button class="${val(E.defrost) === o ? 'on' : ''}" data-select="${E.defrost}" data-opt="${esc(o)}">${esc(o.replace('Lunette arrière', 'Lunette AR').replace('Avant + arrière', 'Avant + AR'))}</button>`).join('')}</div>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Sièges & volant</h2>
-        <div class="grid2">${seatSeg(E.seatD, 'Conducteur')}${seatSeg(E.seatP, 'Passager')}${seatSeg(E.seatRD, 'Arrière gauche')}${seatSeg(E.seatRP, 'Arrière droit')}</div>
-        <div class="setting" style="margin-top:8px;border-top:1px solid var(--line)">
-          <div class="k">🔥 Volant chauffant</div>
-          <label class="switch"><input type="checkbox" data-toggle="${E.wheel}" ${val(E.wheel) === 'on' ? 'checked' : ''}><span></span></label>
-        </div>
-      </section>`;
+      ${plan}
+      ${seats || E.wheel ? `<section class="card"><h2>Sièges & volant</h2>
+        <div class="grid2">${seatSeg('seatD', 'Conducteur')}${seatSeg('seatP', 'Passager')}${seatSeg('seatRD', 'Arrière gauche')}${seatSeg('seatRP', 'Arrière droit')}</div>
+        ${E.wheel ? `<div class="setting" style="margin-top:8px;border-top:1px solid var(--line)"><div class="k">🔥 Volant chauffant</div>
+          <label class="switch"><input type="checkbox" data-toggle="wheel" ${val('wheel') === 'on' ? 'checked' : ''}><span></span></label></div>` : ''}
+      </section>` : ''}`;
   }
 
   function viewCharge() {
-    const s = val(E.charge);
-    const hasSched = attr(E.charge, 'has_charging_schedule');
-    const sStart = attr(E.charge, 'scheduled_charging_start'), sEnd = attr(E.charge, 'scheduled_charging_end');
-    const left = num(E.chargeLeft);
-    const tariff = val(E.tariff);
-    const expensive = tariff === 'HP SEMAINE';
-    const batt = num(E.batt);
-    const cap = num(E.capacity, 77);
-    const toFull = batt !== null ? ((100 - batt) / 100 * cap / 0.9) : null;
+    const s = val('charge');
+    const hasSched = attr('charge', 'has_charging_schedule');
+    const sStart = attr('charge', 'scheduled_charging_start'), sEnd = attr('charge', 'scheduled_charging_end');
+    const left = num('chargeLeft');
+    const batt = num('batt');
+    const cap = num('capacity');
+    const toFull = batt !== null && cap ? ((100 - batt) / 100 * cap / 0.9) : null;
+    const tariff = E.tariff && STATES[E.tariff] ? STATES[E.tariff].state : null;
+    const editablePrice = E.priceKwh && E.priceKwh.includes('chrplus');
+    const costs = costReady() ? `
+      <section class="card"><h2>Ce que ça coûte</h2>
+        <div class="grid2">
+          <div class="stat"><div class="k">Ce mois</div><div class="v">${fmt(num('costMonth'), 2)}<small> €</small></div><div class="small muted">${fmt(num('kwhMonth'), 1)} kWh</div></div>
+          <div class="stat"><div class="k">Dernière recharge</div><div class="v">${fmt(num('costLast'), 2)}<small> €</small></div><div class="small muted">${fmt(num('kwhLast'), 1)} kWh</div></div>
+        </div>
+        ${editablePrice
+          ? `<div class="setting" style="margin-top:6px"><div><div class="k">Prix du kWh</div><div class="d">ton tarif de recharge</div></div>${stepper('priceKwh', ' €', 0.01, 0, 2, 2)}</div>`
+          : line('Prix du kWh (dernière charge)', `${fmt(num('priceKwh'), 4)} €`)}
+        <div class="setting"><div><div class="k">Capacité batterie</div><div class="d">utile, en kWh</div></div>${stepper('capacity', '', 1, 10, 150)}</div>
+        <p class="small muted" style="margin:6px 0 0">Estimé d'après le % gagné et ~10 % de pertes.</p>
+      </section>` : installCard('Suivi des coûts', "Calcule l'énergie et le prix de chaque recharge, et le total du mois.", 'install-costs');
     return `
-      <section class="card">
-        <h2>Recharge ${chargePill()}</h2>
+      <section class="card"><h2>Recharge ${chargePill()}</h2>
         <div class="hero">
-          <div class="ring">${ring(batt, s === 'charging' ? '#3DDC97' : '#5AB8FF')}<div class="lbl"><div class="pct">${fmt(batt)}%</div><div class="cap">${fmt(num(E.range))} km</div></div></div>
+          <div class="ring">${ring(batt, s === 'charging' ? '#3DDC97' : '#5AB8FF')}<div class="lbl"><div class="pct">${fmt(batt)}%</div><div class="cap">${fmt(num('range'))} km</div></div></div>
           <div>
             ${s === 'charging' ? `<div class="big">${left !== null ? (left >= 60 ? `${Math.floor(left / 60)} h ${String(Math.round(left % 60)).padStart(2, '0')}` : `${Math.round(left)} min`) : '—'}</div><div class="muted small">avant la fin</div>` : ''}
-            ${hasSched && sStart ? `<div style="margin-top:8px"><div class="small muted">Charge programmée</div><div style="font-weight:700;font-size:18px">${hhmm(new Date(sStart))} → ${sEnd ? hhmm(new Date(sEnd)) : '?'}</div><div class="small muted">${esc(attr(E.charge, 'scheduled_charging_duration') || '')}</div></div>` : '<div class="muted small">Pas de charge programmée dans la voiture</div>'}
-          </div>
-        </div>
-        <div class="line" style="margin-top:10px"><span class="k">Tarif en ce moment</span><span class="v"><span class="pill ${expensive ? 'r' : 'g'}">${esc(tariff || '—')}</span></span></div>
-        <div class="line"><span class="k">Pour faire le plein (≈)</span><span class="v">${toFull !== null ? fmt(toFull, 1) + ' kWh' : '—'}</span></div>
-        <button class="btn" data-act="refresh-elec" style="margin-top:8px">⟳ Actualiser l'état de charge</button>
+            ${hasSched && sStart ? `<div style="margin-top:8px"><div class="small muted">Charge programmée</div><div style="font-weight:700;font-size:18px">${hhmm(new Date(sStart))} → ${sEnd ? hhmm(new Date(sEnd)) : '?'}</div><div class="small muted">${esc(attr('charge', 'scheduled_charging_duration') || '')}</div></div>` : '<div class="muted small">Pas de charge programmée dans la voiture</div>'}
+          </div></div>
+        ${tariff ? line('Tarif en ce moment', `<span class="pill ${/HP|pleine|peak/i.test(tariff) && !/HC|creuse|off/i.test(tariff) ? 'r' : 'g'}">${esc(tariff)}</span>`) : ''}
+        ${toFull !== null ? line('Pour faire le plein (≈)', `${fmt(toFull, 1)} kWh`) : ''}
+        ${E.refreshElec ? '<button class="btn" data-act="refresh-elec" style="margin-top:8px">⟳ Actualiser l\'état de charge</button>' : ''}
       </section>
-
-      <section class="card">
-        <h2>Ce que ça coûte</h2>
-        <div class="grid2">
-          <div class="stat"><div class="k">Ce mois</div><div class="v">${fmt(num(E.costMonth), 2)}<small> €</small></div><div class="small muted">${fmt(num(E.kwhMonth), 1)} kWh</div></div>
-          <div class="stat"><div class="k">Dernière recharge</div><div class="v">${fmt(num(E.costLast), 2)}<small> €</small></div><div class="small muted">${fmt(num(E.kwhLast), 1)} kWh</div></div>
-        </div>
-        <div class="line" style="margin-top:8px"><span class="k">Prix du kWh (dernière charge)</span><span class="v">${fmt(num(E.priceKwh), 4)} €</span></div>
-        <p class="small muted" style="margin:6px 0 0">Estimé d'après le % gagné, ${fmt(cap)} kWh de batterie et ~10 % de pertes.</p>
-      </section>
-
-      <section class="card">
-        <h2>Batterie sur 7 jours</h2>
-        ${lineChart(CHART.batt)}
-      </section>`;
+      ${costs}
+      <section class="card"><h2>Batterie sur 7 jours</h2>${lineChart(CHART.batt)}</section>`;
   }
 
   function viewTrips() {
-    const w = E.statWeek, m = E.statMonth, d = E.statDay;
-    const score = (id) => { const s = attr(id, 'Hybrid_score'); return s !== undefined && s !== null ? `${Math.round(s)}/100` : '—'; };
+    const score = (r) => { const s = attr(r, 'Hybrid_score'); return s !== undefined && s !== null ? `${Math.round(s)}/100` : '—'; };
+    const dur = (r) => esc(attr(r, 'Duration') || '—');
     return `
-      <section class="card">
-        <h2>Kilomètres <button class="pill" data-act="refresh-trips">⟳</button></h2>
+      <section class="card"><h2>Kilomètres ${E.refreshTrips ? '<button class="pill" data-act="refresh-trips">⟳</button>' : ''}</h2>
         <div class="grid2">
-          <div class="stat"><div class="k">Aujourd'hui</div><div class="v">${fmt(num(d), 1)}<small> km</small></div></div>
-          <div class="stat"><div class="k">Cette semaine</div><div class="v">${fmt(num(w), 0)}<small> km</small></div></div>
-          <div class="stat"><div class="k">Ce mois</div><div class="v">${fmt(num(m), 0)}<small> km</small></div></div>
-          <div class="stat"><div class="k">Cette année</div><div class="v">${fmt(num(E.statYear), 0)}<small> km</small></div></div>
-        </div>
+          <div class="stat"><div class="k">Aujourd'hui</div><div class="v">${fmt(num('statDay'), 1)}<small> km</small></div></div>
+          <div class="stat"><div class="k">Cette semaine</div><div class="v">${fmt(num('statWeek'))}<small> km</small></div></div>
+          <div class="stat"><div class="k">Ce mois</div><div class="v">${fmt(num('statMonth'))}<small> km</small></div></div>
+          <div class="stat"><div class="k">Cette année</div><div class="v">${fmt(num('statYear'))}<small> km</small></div></div>
+        </div></section>
+      <section class="card"><h2>Conduite</h2>
+        ${line("Aujourd'hui", `${dur('statDay')} · score ${score('statDay')}`)}
+        ${line('Semaine', `${dur('statWeek')} · score ${score('statWeek')}`)}
+        ${line('Mois', `${dur('statMonth')} · score ${score('statMonth')}`)}
+        ${E.speedWeek ? line('Vitesse moyenne (semaine)', `${fmt(num('speedWeek'))} km/h`) : ''}
+        ${E.odo ? line('Compteur', `${fmt(num('odo'))} km`) : ''}
       </section>
-
-      <section class="card">
-        <h2>Conduite</h2>
-        <div class="line"><span class="k">Aujourd'hui</span><span class="v">${esc(attr(d, 'Duration') || '—')} · score ${score(d)}</span></div>
-        <div class="line"><span class="k">Semaine</span><span class="v">${esc(attr(w, 'Duration') || '—')} · score ${score(w)}</span></div>
-        <div class="line"><span class="k">Mois</span><span class="v">${esc(attr(m, 'Duration') || '—')} · score ${score(m)}</span></div>
-        <div class="line"><span class="k">Vitesse moyenne (semaine)</span><span class="v">${fmt(num(E.speedWeek))} km/h</span></div>
-        <div class="line"><span class="k">Compteur</span><span class="v">${fmt(num(E.odo))} km</span></div>
-      </section>
-
-      <section class="card">
-        <h2>Km par jour · 30 jours</h2>
-        ${barChart(CHART.km)}
-      </section>`;
+      <section class="card"><h2>Km par jour · 30 jours</h2>${barChart(CHART.km)}</section>`;
   }
 
-  // ---------- Écran de configuration ----------
-  function showSetup() {
+  // ---------- Réglages ----------
+  async function showSetup() {
     $('#tabs').style.display = 'none';
+    const connected = connState === 'ok' && discovered;
     $('#view').innerHTML = `
       <div class="card setup">
         <div class="title">Connexion à Home Assistant</div>
         <label>Adresse de Home Assistant
-          <input type="url" id="cfg-url" placeholder="https://xxxxxxxx.ui.nabu.casa" value="${esc(cfg.url)}" autocapitalize="off" autocorrect="off" spellcheck="false">
-        </label>
-        <div class="help">Ton adresse Nabu Casa (Paramètres → Home Assistant Cloud → Accès à distance). À la maison, l'adresse locale marche aussi.</div>
+          <input type="url" id="cfg-url" placeholder="https://xxxxxxxx.ui.nabu.casa" value="${esc(cfg.url)}" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
+        <div class="help">Adresse Nabu Casa (Paramètres → Home Assistant Cloud) ou ta propre adresse. À la maison, l'adresse locale marche aussi.</div>
         <label>Jeton d'accès longue durée
-          <input type="password" id="cfg-token" placeholder="eyJ0eXAiOi…" value="${esc(cfg.token)}" autocapitalize="off" autocorrect="off" spellcheck="false">
-        </label>
+          <input type="password" id="cfg-token" placeholder="eyJ0eXAiOi…" value="${esc(cfg.token)}" autocapitalize="off" autocorrect="off" spellcheck="false"></label>
         <div class="help">Dans Home Assistant : ton profil → Sécurité → Jetons d'accès longue durée → Créer. Il reste uniquement sur ce téléphone.</div>
-        <button class="btn acc" id="cfg-save">Se connecter</button>
-        ${cfg.url ? '<button class="btn" id="cfg-cancel">Annuler</button><button class="btn danger" id="cfg-clear">Effacer la connexion</button>' : ''}
-      </div>`;
-    $('#cfg-save').onclick = () => {
-      const url = cleanUrl($('#cfg-url').value);
-      const token = $('#cfg-token').value.trim();
-      if (!/^https?:\/\/.+/i.test(url)) { toast("L'adresse doit commencer par https://", true); return; }
-      if (token.length < 20) { toast('Colle le jeton complet', true); return; }
-      cfg.save(url, token);
-      if (ws) { wantConnected = false; try { ws.close(); } catch (e) { } ws = null; }
-      connState = 'idle';
-      hideSetup();
-      connect();
-    };
+        <button class="btn acc" id="cfg-save">${cfg.url ? 'Enregistrer' : 'Se connecter'}</button>
+      </div>
+      ${connected ? `<div class="card setup" id="cfg-more"><div class="title">Ma voiture et ma maison</div><div class="help">Chargement…</div></div>` : ''}
+      ${cfg.url ? `<div class="card setup">${cfg.url && connected ? '' : ''}<button class="btn" id="cfg-cancel">Retour</button>
+        <button class="btn danger" id="cfg-clear">Effacer la connexion</button>
+        <div class="help center">CHR+ · appli non officielle, sans lien avec Toyota</div></div>` : ''}`;
+    $('#cfg-save').onclick = saveSetup;
     const c = $('#cfg-cancel'); if (c) c.onclick = hideSetup;
-    const x = $('#cfg-clear'); if (x) x.onclick = () => {
-      cfg.clear(); wantConnected = false; if (ws) { try { ws.close(); } catch (e) { } } ws = null; STATES = {}; showSetup();
+    const x = $('#cfg-clear'); if (x) x.onclick = () => { cfg.clear(); wantConnected = false; if (ws) { try { ws.close(); } catch (e) { } } ws = null; STATES = {}; discovered = false; CAR = null; showSetup(); };
+    if (connected) fillMoreSettings();
+  }
+  async function fillMoreSettings() {
+    let states = [];
+    try { states = await send({ type: 'get_states' }); } catch (e) { }
+    const temps = states.filter((s) => s.entity_id.startsWith('weather.') || (s.entity_id.startsWith('sensor.') && s.attributes && s.attributes.device_class === 'temperature'))
+      .map((s) => [s.entity_id, (s.attributes.friendly_name || s.entity_id) + (s.entity_id.startsWith('weather.') ? ' (météo)' : ` (${s.state} °C)`)]);
+    const textSensors = states.filter((s) => s.entity_id.startsWith('sensor.') && isNaN(parseFloat(s.state)) && !['unknown', 'unavailable'].includes(s.state)
+      && /tarif|price|prix|ptec|ltarf|period|hc|hp|tempo/i.test(s.entity_id + ' ' + (s.attributes.friendly_name || '')))
+      .map((s) => [s.entity_id, `${s.attributes.friendly_name || s.entity_id} (${s.state})`]);
+    const opt = (list, cur, none) => `<option value="">${none}</option>` + list.map(([id, l]) => `<option value="${esc(id)}" ${id === cur ? 'selected' : ''}>${esc(l)}</option>`).join('');
+    const box = $('#cfg-more'); if (!box) return;
+    box.innerHTML = `<div class="title">Ma voiture et ma maison</div>
+      ${CARS.length > 1 ? `<label>Voiture<select id="cfg-car">${CARS.map((c, i) => `<option value="${esc(c.di)}" ${c === CAR ? 'selected' : ''}>${esc(carName(c))} (${i + 1})</option>`).join('')}</select></label>` : `<div class="help">Voiture : <strong>${esc(carName(CAR))}</strong>${CAR ? '' : ' — aucune trouvée'}</div>`}
+      <label>Température extérieure<select id="cfg-outside">${opt(temps, E.outside, '— aucune —')}</select></label>
+      <div class="help">Sert au planificateur : la clim ne se lance que s'il fait plus froid que le seuil.</div>
+      <label>Tarif électrique en cours (facultatif)<select id="cfg-tariff">${opt(textSensors, E.tariff, '— aucun —')}</select></label>
+      <div class="help">Par ex. heures pleines / heures creuses d'un capteur Linky.</div>
+      <button class="btn acc" id="cfg-more-save">Enregistrer</button>
+      ${!IS_ADMIN ? '<div class="help">Connecté avec un compte non administrateur : l\'installation du planificateur et du suivi des coûts n\'est pas possible.</div>' : ''}`;
+    $('#cfg-more-save').onclick = () => {
+      const car = $('#cfg-car'); if (car) LS.set('car', car.value);
+      LS.set('outside', $('#cfg-outside').value || '');
+      LS.set('tariff', $('#cfg-tariff').value || '');
+      CAR = CARS.find((c) => c.di === LS.get('car')) || CARS[0] || null;
+      resolveRoles(); subscribe(); loadSchedule(); loadCharts(true);
+      toast('Réglages enregistrés'); hideSetup();
     };
+  }
+  function saveSetup() {
+    const url = cleanUrl($('#cfg-url').value);
+    const token = $('#cfg-token').value.trim();
+    if (!/^https?:\/\/.+/i.test(url)) { toast("L'adresse doit commencer par https://", true); return; }
+    if (token.length < 20) { toast('Colle le jeton complet', true); return; }
+    const changed = url !== cfg.url || token !== cfg.token;
+    cfg.save(url, token);
+    hideSetup();
+    if (changed || connState !== 'ok') {
+      if (ws) { wantConnected = false; const old = ws; ws = null; try { old.close(); } catch (e) { } }
+      connState = 'idle'; discovered = false; STATES = {};
+      connect();
+    }
   }
   function hideSetup() { $('#tabs').style.display = ''; $('#view').innerHTML = ''; scheduleRender(); }
 
   // ---------- Actions ----------
-  let lastStepAt = {};
+  const timers = {};
+  function heatNow() {
+    const t = E.target ? num('target', 21) : (attr('climate', 'temperature') || 21);
+    const p = [callService('climate', 'set_temperature', E.climate, { temperature: t })];
+    if (E.defrost && hasPresets()) p.push(quiet(callService('climate', 'set_preset_mode', E.climate, { preset_mode: DEFROST_PRESET[val('defrost')] || 'none' })));
+    Promise.all(p).then(() => callService('climate', 'set_hvac_mode', E.climate, { hvac_mode: hvacOn() }, 'Préchauffage lancé 🔥')).catch(() => { });
+  }
   function onClick(e) {
     const b = e.target.closest('button, [data-act]');
     if (!b) return;
     const act = b.dataset.act;
+    const q = (p) => quiet(p);
     if (act === 'settings') { showSetup(); return; }
-    if (act === 'lock') callService('lock', 'lock', E.lock, null, 'Verrouillage envoyé');
-    else if (act === 'unlock') { if (confirm('Déverrouiller la C-HR+ ?')) callService('lock', 'unlock', E.lock, null, 'Déverrouillage envoyé'); }
-    else if (act === 'horn') { if (confirm('Klaxonner la C-HR+ ?')) callService('button', 'press', E.horn, null, 'Klaxon envoyé'); }
-    else if (act === 'hazard') callService('switch', 'toggle', E.hazard, null, 'Warnings envoyés');
-    else if (act === 'heat-now') callService('script', 'turn_on', 'script.chr_lancer_prechauffage', null, 'Préchauffage lancé 🔥');
-    else if (act === 'heat-stop') callService('script', 'turn_on', 'script.chr_arreter_climatisation', null, 'Arrêt de la clim envoyé');
-    else if (act === 'refresh-elec') callService('button', 'press', E.refreshElec, null, 'Actualisation demandée');
-    else if (act === 'refresh-trips') { callService('button', 'press', E.refreshTrips, null, 'Actualisation demandée'); loadCharts(true); }
+    if (act === 'rediscover') { discover(); return; }
+    if (act === 'lock') q(callService('lock', 'lock', E.lock, null, 'Verrouillage envoyé'));
+    else if (act === 'unlock') { if (confirm('Déverrouiller la voiture ?')) q(callService('lock', 'unlock', E.lock, null, 'Déverrouillage envoyé')); }
+    else if (act === 'horn') { if (confirm('Klaxonner ?')) q(callService('button', 'press', E.horn, null, 'Klaxon envoyé')); }
+    else if (act === 'hazard') q(callService('switch', 'toggle', E.hazard, null, 'Warnings envoyés'));
+    else if (act === 'heat-now') heatNow();
+    else if (act === 'heat-stop') q(callService('climate', 'set_hvac_mode', E.climate, { hvac_mode: 'off' }, 'Arrêt de la clim envoyé'));
+    else if (act === 'refresh-elec') q(callService('button', 'press', E.refreshElec, null, 'Actualisation demandée'));
+    else if (act === 'refresh-trips') { q(callService('button', 'press', E.refreshTrips, null, 'Actualisation demandée')); loadCharts(true); }
+    else if (act === 'install-plan') { b.disabled = true; installPlanner(); }
+    else if (act === 'install-costs') { b.disabled = true; installCosts(); }
 
     if (b.dataset.step) {
-      const id = b.dataset.step;
-      const nv = Math.max(+b.dataset.min, Math.min(+b.dataset.max, (num(id, 0)) + (+b.dataset.d)));
-      if (STATES[id]) STATES[id].state = String(nv); // affichage immédiat
+      const role = b.dataset.step, id = E[role];
+      const stepv = +b.dataset.d;
+      const dec = Math.abs(stepv) < 1 ? 4 : 0;
+      const nv = +Math.max(+b.dataset.min, Math.min(+b.dataset.max, num(role, 0) + stepv)).toFixed(dec);
+      if (STATES[id]) STATES[id].state = String(nv);
       scheduleRender();
-      clearTimeout(lastStepAt[id]);
-      lastStepAt[id] = setTimeout(() => callService('input_number', 'set_value', id, { value: nv }), 500);
+      clearTimeout(timers[role]);
+      timers[role] = setTimeout(() => q(callService('input_number', 'set_value', id, { value: nv })), 500);
     }
     if (b.dataset.select) {
-      const id = b.dataset.select, opt = b.dataset.opt;
-      const domain = id.split('.')[0];
+      const role = b.dataset.select, id = E[role], opt = b.dataset.opt;
       if (STATES[id]) STATES[id].state = opt;
       scheduleRender();
-      callService(domain, 'select_option', id, { option: opt });
+      q(callService(id.split('.')[0], 'select_option', id, { option: opt }));
     }
-    if (b.dataset.preset) callService('climate', 'set_preset_mode', E.climate, { preset_mode: b.dataset.preset }, 'Dégivrage envoyé');
+    if (b.dataset.preset) q(callService('climate', 'set_preset_mode', E.climate, { preset_mode: b.dataset.preset }, 'Dégivrage envoyé'));
     if (b.dataset.climTemp) {
-      const t = Math.max(18, Math.min(29, (attr(E.climate, 'temperature') || 22) + (+b.dataset.climTemp)));
-      if (STATES[E.climate]) STATES[E.climate].attributes = Object.assign({}, STATES[E.climate].attributes, { temperature: t });
+      const t = Math.max(18, Math.min(29, (attr('climate', 'temperature') || 21) + (+b.dataset.climTemp)));
+      const s = STATES[E.climate]; if (s) s.attributes = Object.assign({}, s.attributes, { temperature: t });
       scheduleRender();
-      clearTimeout(lastStepAt.clim);
-      lastStepAt.clim = setTimeout(() => callService('climate', 'set_temperature', E.climate, { temperature: t }, `Consigne ${t} °C envoyée`), 600);
+      clearTimeout(timers.clim);
+      timers.clim = setTimeout(() => q(callService('climate', 'set_temperature', E.climate, { temperature: t }, `Consigne ${t} °C envoyée`)), 600);
     }
     if (b.dataset.day) toggleDay(b.dataset.day);
   }
-
   function onChange(e) {
     const t = e.target;
     if (t.dataset.toggle) {
-      const id = t.dataset.toggle;
-      const domain = id.split('.')[0];
+      const id = E[t.dataset.toggle];
       if (STATES[id]) STATES[id].state = t.checked ? 'on' : 'off';
-      callService(domain, t.checked ? 'turn_on' : 'turn_off', id, null, t.checked ? 'Activé' : 'Désactivé');
+      quiet(callService(id.split('.')[0], t.checked ? 'turn_on' : 'turn_off', id, null, t.checked ? 'Activé' : 'Désactivé'));
       scheduleRender();
     }
     if (t.id === 'depart-time' && t.value) {
       t.blur();
-      callService('input_datetime', 'set_datetime', E.depart, { time: t.value + ':00' }, `Départ réglé à ${t.value}`);
+      quiet(callService('input_datetime', 'set_datetime', E.depart, { time: t.value + ':00' }, `Départ réglé à ${t.value}`));
     }
   }
 
@@ -753,35 +879,28 @@
     $('#btn-refresh').onclick = () => {
       const b = $('#btn-refresh');
       b.innerHTML = '<span class="spin">⟳</span>';
-      callService('button', 'press', E.refresh, null, 'Actualisation demandée à la voiture').finally(() => setTimeout(() => (b.textContent = '⟳'), 1500));
+      const p = E.refresh ? callService('button', 'press', E.refresh, null, 'Actualisation demandée à la voiture') : Promise.resolve();
+      quiet(p).finally(() => setTimeout(() => (b.textContent = '⟳'), 1500));
       loadSchedule(); loadCharts(true);
     };
     $('#tabs').addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-tab]');
-      if (!b) return;
+      const b = e.target.closest('button[data-tab]'); if (!b) return;
       tab = b.dataset.tab;
       document.querySelectorAll('#tabs button').forEach((x) => x.classList.toggle('on', x === b));
-      window.scrollTo(0, 0);
-      scheduleRender();
+      window.scrollTo(0, 0); scheduleRender();
     });
     document.addEventListener('visibilitychange', () => { if (!document.hidden) window.chrResume(); });
     setInterval(() => { if (connState === 'ok') scheduleRender(); }, 30000);
-
-    if (!cfg.url || !cfg.token) showSetup();
-    else { scheduleRender(); connect(); }
+    if (!cfg.url || !cfg.token) showSetup(); else { scheduleRender(); connect(); }
   }
-
-  // Appelé par Android quand l'appli revient au premier plan
   window.chrResume = function () {
     if (!cfg.url || !cfg.token || $('.setup')) return;
-    if (!ws || ws.readyState > 1) { retry = 0; connect(); } else { loadCharts(); }
+    if (!ws || ws.readyState > 1) { retry = 0; connect(); } else loadCharts();
   };
-  // Bouton retour Android : ferme les réglages au lieu de quitter
   window.chrBack = function () {
     if ($('.setup') && cfg.url && cfg.token) { hideSetup(); return true; }
     if (tab !== 'voiture') { $('#tabs button[data-tab="voiture"]').click(); return true; }
     return false;
   };
-
   init();
 })();
