@@ -497,6 +497,7 @@
   }
   function carName(c) {
     if (!c) return 'CHR+';
+    if (c === CAR && LS.get('carName')) return LS.get('carName');
     const s = c.roles.vin && STATES[c.roles.vin];
     const fn = STATES[c.roles.batt || c.roles.lock || c.roles.odo];
     const n = fn && fn.attributes && fn.attributes.friendly_name ? fn.attributes.friendly_name.split(' ')[0] : '';
@@ -539,6 +540,83 @@
   }
   const line = (k, v) => `<div class="line"><span class="k">${k}</span><span class="v">${v}</span></div>`;
 
+
+  // Illustration originale (SUV compact générique) affichée tant qu'aucune photo n'est choisie
+  const ILLUSTRATION = `<svg viewBox="0 0 400 225" preserveAspectRatio="xMidYMid slice" class="photo-ill">
+    <defs>
+      <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22324a"/><stop offset=".62" stop-color="#3a3550"/><stop offset=".63" stop-color="#151a21"/><stop offset="1" stop-color="#0e1116"/></linearGradient>
+      <radialGradient id="sun" cx="0.72" cy="0.58" r="0.35"><stop offset="0" stop-color="#ff8a4c" stop-opacity=".55"/><stop offset="1" stop-color="#ff8a4c" stop-opacity="0"/></radialGradient>
+      <linearGradient id="body" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9eef5"/><stop offset=".55" stop-color="#b9c3d0"/><stop offset="1" stop-color="#7d8898"/></linearGradient>
+      <linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4a6a8c"/><stop offset="1" stop-color="#151a21"/></linearGradient>
+      <linearGradient id="road" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3ddc97" stop-opacity=".0"/><stop offset="1" stop-color="#3ddc97" stop-opacity=".18"/></linearGradient>
+    </defs>
+    <rect width="400" height="225" fill="url(#sky)"/>
+    <rect width="400" height="225" fill="url(#sun)"/>
+    <path d="M0,141 L60,128 L110,136 L170,120 L230,134 L300,118 L360,130 L400,124 L400,141 Z" fill="#1a2230"/>
+    <rect y="141" width="400" height="84" fill="url(#road)"/>
+    <ellipse cx="207" cy="192" rx="160" ry="9" fill="#000" opacity=".45"/>
+    <!-- carrosserie (crossover haut sur roues) -->
+    <path d="M60,160 C58,148 64,140 78,137 L118,131 C134,112 156,98 186,94 L254,92 C280,92 300,104 318,122 L336,127 C350,130 358,140 358,152 L358,160 C358,164 355,167 351,167 L68,167 C63,167 60,164 60,160 Z" fill="url(#body)"/>
+    <!-- protections noires de passages de roues et bas de caisse -->
+    <path d="M78,167 L80,158 A30,30 0 0 1 138,158 L140,167 Z M274,167 L276,158 A30,30 0 0 1 334,158 L336,167 Z" fill="#202733"/>
+    <rect x="138" y="160" width="138" height="9" rx="3" fill="#202733"/>
+    <path d="M60,158 L80,158 L80,167 L68,167 C63,167 60,164 60,160 Z M334,158 L358,158 L358,160 C358,164 355,167 351,167 L334,167 Z" fill="#202733"/>
+    <!-- vitres -->
+    <path d="M132,128 C146,113 164,103 188,100 L214,99 L212,128 Z" fill="url(#glass)"/>
+    <path d="M220,99 L254,98 C272,98 288,107 302,122 L302,128 L218,128 Z" fill="url(#glass)"/>
+    <path d="M114,132 L340,132" stroke="#7d8898" stroke-width="1.2" opacity=".7"/>
+    <!-- barres de toit -->
+    <path d="M170,93 L262,90" stroke="#4a5566" stroke-width="3" stroke-linecap="round"/>
+    <!-- feux -->
+    <path d="M330,134 L354,138 L353,143 L328,140 Z" fill="#e9f6ff"/>
+    <path d="M354,139 L398,130 L398,152 Z" fill="#e9f6ff" opacity=".08"/>
+    <path d="M62,140 L82,137 L82,142 L62,145 Z" fill="#ff5d6c"/>
+    <!-- poignées -->
+    <rect x="176" y="137" width="14" height="3" rx="1.5" fill="#7d8898"/><rect x="250" y="137" width="14" height="3" rx="1.5" fill="#7d8898"/>
+    <!-- roues -->
+    <g><circle cx="109" cy="170" r="24" fill="#151a21"/><circle cx="109" cy="170" r="14" fill="#4a5566"/><circle cx="109" cy="170" r="5" fill="#b9c3d0"/></g>
+    <g><circle cx="305" cy="170" r="24" fill="#151a21"/><circle cx="305" cy="170" r="14" fill="#4a5566"/><circle cx="305" cy="170" r="5" fill="#b9c3d0"/></g>
+    <!-- éclair électrique -->
+    <path d="M240,112 L232,122 L237,122 L234,130 L244,118 L239,118 Z" fill="#3ddc97"/>
+  </svg>`;
+
+  function photoCard() {
+    const photo = LS.get('photo');
+    const b = num('batt');
+    return `<section class="photo-card">
+      ${photo ? `<img src="${photo}" alt="Ma voiture" style="object-position:center ${esc(LS.get('photoY', '55'))}%">` : ILLUSTRATION}
+      <div class="photo-shade"></div>
+      <button class="photo-btn" data-act="photo" aria-label="Changer la photo">📷</button>
+      <div class="photo-cap">
+        <div class="photo-name">${esc(carName(CAR))}</div>
+        <div class="photo-sub">${b !== null ? `${fmt(b)} % · ${fmt(num('range') ?? num('fuelRange'))} km` : ''}${E.lock ? ` · ${val('lock') === 'locked' ? '🔒' : '🔓'}` : ''}</div>
+      </div>
+      ${photo ? '' : '<div class="photo-hint">Touche 📷 pour mettre la photo de ta voiture</div>'}
+    </section>`;
+  }
+
+  // Réduit la photo choisie (1280 px, JPEG) avant de la garder sur le téléphone
+  function onPhotoPicked(file) {
+    if (!file) return;
+    const fr = new FileReader();
+    fr.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const W = Math.min(1280, img.naturalWidth), H = Math.round(img.naturalHeight * W / img.naturalWidth);
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        c.getContext('2d').drawImage(img, 0, 0, W, H);
+        let q = 0.82, data = c.toDataURL('image/jpeg', q);
+        while (data.length > 900000 && q > 0.4) { q -= 0.1; data = c.toDataURL('image/jpeg', q); }
+        try { localStorage.setItem('chr_photo', data); toast('Photo enregistrée 📸'); }
+        catch (e) { toast('Photo trop lourde, essaie une autre', true); }
+        scheduleRender();
+      };
+      img.onerror = () => toast("Impossible de lire cette image", true);
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  }
+
   function viewCar() {
     const batt = num('batt');
     const openList = OPEN_ROLES.filter((r) => E[r] && val(r) === 'on');
@@ -549,7 +627,7 @@
     const warn = num('warnings', 0);
     const battColor = batt === null ? '#4A5566' : batt < 20 ? '#FF5D6C' : batt < 40 ? '#FFC857' : '#3DDC97';
     const fuel = has('fuel') ? num('fuel') : null;
-    return `
+    return `${photoCard()}
       <section class="card"><div class="hero">
         <div class="ring">${ring(batt ?? fuel, battColor)}<div class="lbl"><div class="pct">${fmt(batt ?? fuel)}%</div><div class="cap">${batt !== null ? 'batterie' : 'carburant'}</div></div></div>
         <div>
@@ -774,6 +852,9 @@
     const box = $('#cfg-more'); if (!box) return;
     box.innerHTML = `<div class="title">Ma voiture et ma maison</div>
       ${CARS.length > 1 ? `<label>Voiture<select id="cfg-car">${CARS.map((c, i) => `<option value="${esc(c.di)}" ${c === CAR ? 'selected' : ''}>${esc(carName(c))} (${i + 1})</option>`).join('')}</select></label>` : `<div class="help">Voiture : <strong>${esc(carName(CAR))}</strong>${CAR ? '' : ' — aucune trouvée'}</div>`}
+      <label>Nom de la voiture<input type="text" id="cfg-carname" maxlength="20" placeholder="${esc(carName(CAR))}" value="${esc(LS.get('carName'))}"></label>
+      <div class="row"><button class="btn" data-act="photo">📷 Changer la photo</button>${LS.get('photo') ? '<button class="btn danger" data-act="photo-remove">Retirer</button>' : ''}</div>
+      ${LS.get('photo') ? '<div class="row"><button class="btn" data-act="photo-up">▲ Cadrer plus haut</button><button class="btn" data-act="photo-down">▼ Plus bas</button></div>' : ''}
       <label>Température extérieure<select id="cfg-outside">${opt(temps, E.outside, '— aucune —')}</select></label>
       <div class="help">Sert au planificateur : la clim ne se lance que s'il fait plus froid que le seuil.</div>
       <label>Tarif électrique en cours (facultatif)<select id="cfg-tariff">${opt(textSensors, E.tariff, '— aucun —')}</select></label>
@@ -782,6 +863,7 @@
       ${!IS_ADMIN ? '<div class="help">Connecté avec un compte non administrateur : l\'installation du planificateur et du suivi des coûts n\'est pas possible.</div>' : ''}`;
     $('#cfg-more-save').onclick = () => {
       const car = $('#cfg-car'); if (car) LS.set('car', car.value);
+      LS.set('carName', $('#cfg-carname').value.trim() || null);
       LS.set('outside', $('#cfg-outside').value || '');
       LS.set('tariff', $('#cfg-tariff').value || '');
       CAR = CARS.find((c) => c.di === LS.get('car')) || CARS[0] || null;
@@ -820,6 +902,12 @@
     const q = (p) => quiet(p);
     if (act === 'settings') { showSetup(); return; }
     if (act === 'rediscover') { discover(); return; }
+    if (act === 'photo') { $('#photo-input').value = ''; $('#photo-input').click(); return; }
+    if (act === 'photo-remove') { LS.set('photo', null); toast('Photo retirée'); scheduleRender(); return; }
+    if (act === 'photo-up' || act === 'photo-down') {
+      const y = Math.max(0, Math.min(100, (+LS.get('photoY', '55')) + (act === 'photo-up' ? -10 : 10)));
+      LS.set('photoY', String(y)); toast('Cadrage ajusté'); return;
+    }
     if (act === 'lock') q(callService('lock', 'lock', E.lock, null, 'Verrouillage envoyé'));
     else if (act === 'unlock') { if (confirm('Déverrouiller la voiture ?')) q(callService('lock', 'unlock', E.lock, null, 'Déverrouillage envoyé')); }
     else if (act === 'horn') { if (confirm('Klaxonner ?')) q(callService('button', 'press', E.horn, null, 'Klaxon envoyé')); }
@@ -876,6 +964,7 @@
     document.addEventListener('click', onClick);
     document.addEventListener('change', onChange);
     $('#btn-settings').onclick = showSetup;
+    $('#photo-input').addEventListener('change', (e) => onPhotoPicked(e.target.files && e.target.files[0]));
     $('#btn-refresh').onclick = () => {
       const b = $('#btn-refresh');
       b.innerHTML = '<span class="spin">⟳</span>';
