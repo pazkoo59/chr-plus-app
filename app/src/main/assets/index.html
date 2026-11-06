@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>CHR+</title>
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="dot" id="conn" title="Connexion"></span>
+      <div>
+        <div class="title">C-HR+</div>
+        <div class="sub" id="sync">Connexion…</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button class="icon-btn" id="btn-refresh" aria-label="Actualiser la voiture">⟳</button>
+      <button class="icon-btn" id="btn-settings" aria-label="Réglages">⚙</button>
+    </div>
+  </header>
+
+  <main id="view"></main>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="voiture" class="on"><span class="ti">🚗</span><span>Voiture</span></button>
+    <button data-tab="prechauffage"><span class="ti">🔥</span><span>Préchauffage</span></button>
+    <button data-tab="recharge"><span class="ti">⚡</span><span>Recharge</span></button>
+    <button data-tab="trajets"><span class="ti">🛣️</span><span>Trajets</span></button>
+  </nav>
+
+  <div class="toast" id="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>

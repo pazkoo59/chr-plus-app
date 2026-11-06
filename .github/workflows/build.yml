@@ -1,0 +1,48 @@
+name: Compiler l'APK CHR+
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Compiler
+        run: gradle --no-daemon assembleRelease
+
+      - name: Renommer l'APK
+        run: cp app/build/outputs/apk/release/app-release.apk CHR-Plus.apk
+
+      - name: Garder l'APK (onglet Actions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: CHR-Plus-apk
+          path: CHR-Plus.apk
+
+      - name: Publier la version « latest » (téléchargeable depuis le téléphone)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest CHR-Plus.apk \
+            --title "CHR+ v1.0.${{ github.run_number }}" \
+            --notes "APK compilé automatiquement depuis le commit ${{ github.sha }}." \
+            --latest

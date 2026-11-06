@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Silhouette de SUV + éclair, dessin original. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- carrosserie -->
+    <path
+        android:fillColor="#E9EEF5"
+        android:pathData="M30,62 L33,50 C34,47 36,45 39,45 L62,45 C65,45 67,46 69,48 L76,55 L80,56 C82,56.5 84,58 84,61 L84,66 C84,67 83,68 82,68 L78,68 A6,6 0 0 0 66,68 L44,68 A6,6 0 0 0 32,68 L28,68 C27,68 26,67 26,66 L26,64 C26,63 28,62 30,62 Z" />
+    <!-- vitres -->
+    <path
+        android:fillColor="#0E1116"
+        android:pathData="M37,54 L39,49 C39.5,48 40,47.6 41,47.6 L52,47.6 L52,54 Z M55,47.6 L62,47.6 C63.5,47.6 64.5,48 65.5,49 L70.5,54 L55,54 Z" />
+    <!-- roues -->
+    <path android:fillColor="#E9EEF5" android:pathData="M38,68 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" />
+    <path android:fillColor="#E9EEF5" android:pathData="M72,68 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" />
+    <!-- éclair -->
+    <path
+        android:fillColor="#3DDC97"
+        android:pathData="M58,26 L46,42 L53,42 L50,54 L63,36 L56,36 Z" />
+</vector>
