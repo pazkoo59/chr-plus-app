@@ -18,12 +18,12 @@ android {
 
     // Clé de signature fixe, fournie par le secret GitHub KEYSTORE_B64 (décodé dans app/release.jks
     // par le workflow). Elle n'est jamais dans le dépôt : les mises à jour s'installent par-dessus.
-    val storePass = System.getenv("SIGNING_PASSWORD") ?: "chrplus-app"
+    val storePass = System.getenv("SIGNING_PASSWORD")?.takeIf { it.isNotBlank() } ?: "chrplus-app"
     signingConfigs {
         create("perso") {
             storeFile = file("release.jks")
             storePassword = storePass
-            keyAlias = System.getenv("SIGNING_ALIAS") ?: "chrplus"
+            keyAlias = System.getenv("SIGNING_ALIAS")?.takeIf { it.isNotBlank() } ?: "chrplus"
             keyPassword = storePass
         }
     }
