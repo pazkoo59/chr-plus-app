@@ -11,6 +11,15 @@
   --bad: #FF5D6C;
   --warn: #FFC857;
   --r: 18px;
+  --tab: #151A21;
+}
+/* Thème clair : suit le réglage du téléphone */
+@media (prefers-color-scheme: light) {
+  :root { --bg: #F3F5F8; --card: #FFFFFF; --card2: #EEF1F5; --line: #DCE2EA; --txt: #121821; --mut: #5F6B7A; --tab: #FFFFFF;
+    --acc: #12A86B; --warn: #C98A00; }
+  .pill.g { background: #12a86b1f; }
+  .icon-btn { box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+  .card { box-shadow: 0 1px 3px rgba(16,24,40,.06); }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--txt);
@@ -71,9 +80,9 @@ main { padding: 4px 14px 18px; display: grid; gap: 12px; }
 
 /* Voiture vue de dessus */
 .car-wrap { display: grid; grid-template-columns: 120px 1fr; gap: 14px; align-items: center; }
-.car-svg .part { fill: #2A3340; stroke: #4A5566; stroke-width: 1.5; transition: fill .3s; }
+.car-svg .part { fill: var(--line); stroke: var(--mut); stroke-width: 1.5; transition: fill .3s; }
 .car-svg .part.open { fill: #ff5d6c55; stroke: var(--bad); }
-.car-svg .glass { fill: #10161d; stroke: #4A5566; stroke-width: 1; }
+.car-svg .glass { fill: var(--card2); stroke: var(--mut); stroke-width: 1; }
 .car-svg .glass.open { fill: #ff5d6c33; stroke: var(--bad); }
 .legend .line .v.ok { color: var(--acc); }
 .legend .line .v.bad { color: var(--bad); }
@@ -137,7 +146,7 @@ input[type=time] { font-size: 22px; font-weight: 700; color-scheme: dark; }
 a { color: var(--cold); }
 
 .tabs { position: fixed; bottom: 0; left: 0; right: 0; display: grid; grid-template-columns: repeat(4, 1fr);
-  background: #151A21; border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); z-index: 6; }
+  background: var(--tab); border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); z-index: 6; }
 .tabs button { border: 0; background: transparent; color: var(--mut); display: grid; justify-items: center; gap: 2px;
   font-size: 11px; font-weight: 600; padding: 6px 0; border-radius: 12px; }
 .tabs .ti { font-size: 20px; filter: grayscale(1); opacity: .7; }
@@ -145,7 +154,7 @@ a { color: var(--cold); }
 .tabs button.on .ti { filter: none; opacity: 1; }
 
 .toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%) translateY(20px); opacity: 0;
-  background: #2A3340; color: var(--txt); padding: 10px 16px; border-radius: 12px; font-weight: 600; transition: .25s;
+  background: var(--txt); color: var(--bg); padding: 10px 16px; border-radius: 12px; font-weight: 600; transition: .25s;
   pointer-events: none; z-index: 10; max-width: 90%; text-align: center; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 .toast.err { background: var(--bad); color: #fff; }
@@ -160,9 +169,17 @@ a { color: var(--cold); }
   border: 1px solid var(--line); }
 .photo-card img, .photo-card .photo-ill { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .photo-shade { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 45%, rgba(14,17,22,.88)); }
-.photo-btn { position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; border-radius: 12px; border: 0;
+.photo-btn { color: #fff; position: absolute; top: 10px; right: 10px; width: 40px; height: 40px; border-radius: 12px; border: 0;
   background: rgba(14,17,22,.55); backdrop-filter: blur(6px); font-size: 18px; }
 .photo-cap { position: absolute; left: 14px; bottom: 12px; right: 60px; }
-.photo-name { font-size: 24px; font-weight: 800; letter-spacing: .3px; text-shadow: 0 2px 10px rgba(0,0,0,.5); }
+.photo-name { color: #fff; font-size: 24px; font-weight: 800; letter-spacing: .3px; text-shadow: 0 2px 10px rgba(0,0,0,.5); }
 .photo-sub { font-size: 13px; color: #d6dde7; font-weight: 600; }
 .photo-hint { position: absolute; top: 12px; left: 14px; right: 60px; font-size: 12px; color: #d6dde7; opacity: .8; }
+
+/* Carte de position */
+.map { position: relative; display: block; height: 190px; overflow: hidden; border-radius: 14px; background: var(--card2); }
+.map .tile { position: absolute; width: 256px; height: 256px; max-width: none; }
+.map .pin { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -92%); font-size: 30px;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.5)); }
+.attrib { font-size: 10px; color: var(--mut); margin-top: 6px; }
+select { max-width: 60%; }

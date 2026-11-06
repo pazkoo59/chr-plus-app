@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_desc">Batterie, autonomie et préchauffage en un geste</string>
+    <string name="sc_heat">Préchauffer</string>
+    <string name="sc_heat_long">Lancer le préchauffage</string>
+    <string name="sc_lock">Verrouiller</string>
+    <string name="sc_lock_long">Verrouiller la voiture</string>
+    <string name="sc_refresh">Actualiser</string>
+    <string name="sc_refresh_long">Actualiser l\'état de la voiture</string>
+</resources>

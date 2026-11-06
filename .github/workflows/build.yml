@@ -64,6 +64,6 @@ jobs:
         run: |
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest CHR-Plus.apk \
-            --title "CHR+ v1.1.${{ github.run_number }}" \
+            --title "CHR+ v1.2.${{ github.run_number }}" \
             --notes-file RELEASE_NOTES.md \
             --latest

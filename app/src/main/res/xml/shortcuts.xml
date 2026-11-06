@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="heat" android:enabled="true" android:icon="@drawable/sc_heat"
+        android:shortcutShortLabel="@string/sc_heat" android:shortcutLongLabel="@string/sc_heat_long">
+        <intent android:action="android.intent.action.VIEW" android:data="chrplus://heat"
+            android:targetPackage="fr.pazkoo.chrplus" android:targetClass="fr.pazkoo.chrplus.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="lock" android:enabled="true" android:icon="@drawable/sc_lock"
+        android:shortcutShortLabel="@string/sc_lock" android:shortcutLongLabel="@string/sc_lock_long">
+        <intent android:action="android.intent.action.VIEW" android:data="chrplus://lock"
+            android:targetPackage="fr.pazkoo.chrplus" android:targetClass="fr.pazkoo.chrplus.MainActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="refresh" android:enabled="true" android:icon="@drawable/sc_refresh"
+        android:shortcutShortLabel="@string/sc_refresh" android:shortcutLongLabel="@string/sc_refresh_long">
+        <intent android:action="android.intent.action.VIEW" android:data="chrplus://refresh"
+            android:targetPackage="fr.pazkoo.chrplus" android:targetClass="fr.pazkoo.chrplus.MainActivity" />
+    </shortcut>
+</shortcuts>

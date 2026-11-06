@@ -13,7 +13,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = buildNumber
-        versionName = "1.1.$buildNumber"
+        versionName = "1.2.$buildNumber"
     }
 
     // Clé de signature fixe, fournie par le secret GitHub KEYSTORE_B64 (décodé dans app/release.jks

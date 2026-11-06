@@ -2,44 +2,60 @@ package fr.pazkoo.chrplus;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.Insets;
+import android.hardware.biometrics.BiometricManager;
+import android.hardware.biometrics.BiometricPrompt;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CancellationSignal;
 import android.view.Window;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
-import android.widget.FrameLayout;
+import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
+
+import org.json.JSONObject;
 
 public class MainActivity extends Activity {
 
     private WebView web;
     private ValueCallback<Uri[]> fileCallback;
     private static final int PICK_PHOTO = 42;
+    /** Action demandée par un raccourci (appui long sur l'icône), récupérée par l'appli au démarrage. */
+    private String pendingAction = null;
+
+    private boolean isNight() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true; // avant Android 10 : thème sombre
+        return (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+    }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        boolean night = isNight();
+        int bg = Color.parseColor(night ? "#0E1116" : "#F3F5F8");
 
         Window w = getWindow();
-        w.setStatusBarColor(Color.parseColor("#0E1116"));
-        w.setNavigationBarColor(Color.parseColor("#151A21"));
+        w.setStatusBarColor(bg);
+        w.setNavigationBarColor(Color.parseColor(night ? "#151A21" : "#FFFFFF"));
 
         WebView.setWebContentsDebuggingEnabled(true);
         web = new WebView(this);
-        web.setBackgroundColor(Color.parseColor("#0E1116"));
+        web.setBackgroundColor(bg);
 
-        // Android 15+ dessine l'appli sous la barre d'état et la barre de navigation (bord à bord) :
-        // on place la WebView dans un cadre qui laisse la place à ces barres et au clavier.
+        // Android 15+ dessine l'appli sous les barres système (bord à bord) :
+        // le cadre laisse la place aux barres et au clavier.
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(Color.parseColor("#0E1116"));
+        root.setBackgroundColor(bg);
         root.addView(web, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(root);
@@ -53,9 +69,8 @@ public class MainActivity extends Activity {
             });
             WindowInsetsController c = w.getInsetsController();
             if (c != null) {
-                // icônes claires sur fond sombre
-                c.setSystemBarsAppearance(0, WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
-                        | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+                int light = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;
+                c.setSystemBarsAppearance(night ? 0 : light, light);
             }
         }
 
@@ -69,16 +84,14 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(true);
         s.setTextZoom(100);
 
+        web.addJavascriptInterface(new Bridge(), "ChrAndroid");
+
         web.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri uri = request.getUrl();
-                String scheme = uri.getScheme();
-                if ("file".equals(scheme)) return false;
-                // Liens externes (carte, Home Assistant...) : ouverts dans l'appli adaptée.
-                try {
-                    startActivity(new Intent(Intent.ACTION_VIEW, uri));
-                } catch (Exception ignored) { }
+                if ("file".equals(uri.getScheme())) return false;
+                try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception ignored) { }
                 return true;
             }
         });
@@ -102,11 +115,23 @@ public class MainActivity extends Activity {
             }
         });
 
-        if (savedInstanceState != null) {
-            web.restoreState(savedInstanceState);
-        } else {
-            web.loadUrl("file:///android_asset/index.html");
-        }
+        pendingAction = actionFrom(getIntent());
+        if (savedInstanceState != null) web.restoreState(savedInstanceState);
+        else web.loadUrl("file:///android_asset/index.html");
+    }
+
+    /** chrplus://heat, chrplus://lock, chrplus://refresh (raccourcis et widget). */
+    private static String actionFrom(Intent i) {
+        if (i == null || i.getData() == null) return null;
+        Uri d = i.getData();
+        return "chrplus".equals(d.getScheme()) ? d.getHost() : null;
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        String a = actionFrom(intent);
+        if (a != null) web.evaluateJavascript("window.chrShortcut && window.chrShortcut(" + JSONObject.quote(a) + ")", null);
     }
 
     @Override
@@ -142,9 +167,81 @@ public class MainActivity extends Activity {
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
         web.evaluateJavascript("window.chrBack ? window.chrBack() : false", value -> {
-            if (!"true".equals(value)) {
-                MainActivity.super.onBackPressed();
-            }
+            if (!"true".equals(value)) MainActivity.super.onBackPressed();
         });
+    }
+
+    private void js(String code) {
+        runOnUiThread(() -> web.evaluateJavascript(code, null));
+    }
+
+    /** Pont entre l'appli (JavaScript) et Android. */
+    private class Bridge {
+        @JavascriptInterface
+        public String takePendingAction() {
+            String a = pendingAction;
+            pendingAction = null;
+            return a == null ? "" : a;
+        }
+
+        /** Connexion + entités utiles au widget (JSON). */
+        @JavascriptInterface
+        public void saveWidgetConfig(String json) {
+            WidgetStore.saveConfig(MainActivity.this, json);
+        }
+
+        /** Dernières valeurs affichées, pour le widget (JSON). */
+        @JavascriptInterface
+        public void pushSnapshot(String json) {
+            WidgetStore.saveSnapshot(MainActivity.this, json);
+            CarWidget.refreshAll(MainActivity.this);
+        }
+
+        @JavascriptInterface
+        public boolean canAuthenticate() {
+            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.P;
+        }
+
+        /** Empreinte / code du téléphone. Réponse : window.chrAuthResult(id, "ok" | "fail" | "unavailable"). */
+        @JavascriptInterface
+        public void authenticate(String title, String id) {
+            runOnUiThread(() -> authenticateOnUi(title, id));
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private void authenticateOnUi(String title, String id) {
+        String cb = "window.chrAuthResult && window.chrAuthResult(" + JSONObject.quote(id) + ",";
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) { js(cb + "'unavailable')"); return; }
+        try {
+            BiometricPrompt.Builder b = new BiometricPrompt.Builder(this)
+                    .setTitle(title)
+                    .setSubtitle("Confirme que c'est bien toi");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                b.setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_WEAK
+                        | BiometricManager.Authenticators.DEVICE_CREDENTIAL);
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                b.setDeviceCredentialAllowed(true);
+            } else {
+                b.setNegativeButton("Annuler", getMainExecutor(), (d, w) -> js(cb + "'fail')"));
+            }
+            b.build().authenticate(new CancellationSignal(), getMainExecutor(), new BiometricPrompt.AuthenticationCallback() {
+                @Override
+                public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
+                    js(cb + "'ok')");
+                }
+
+                @Override
+                public void onAuthenticationError(int code, CharSequence msg) {
+                    boolean none = code == BiometricPrompt.BIOMETRIC_ERROR_HW_NOT_PRESENT
+                            || code == BiometricPrompt.BIOMETRIC_ERROR_HW_UNAVAILABLE
+                            || code == BiometricPrompt.BIOMETRIC_ERROR_NO_BIOMETRICS
+                            || code == BiometricPrompt.BIOMETRIC_ERROR_NO_DEVICE_CREDENTIAL;
+                    js(cb + (none ? "'unavailable')" : "'fail')"));
+                }
+            });
+        } catch (Exception e) {
+            js(cb + "'unavailable')");
+        }
     }
 }

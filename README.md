@@ -5,10 +5,14 @@ Appli Android **non officielle** pour suivre et piloter une Toyota électrique (
 
 | Onglet | Contenu |
 |---|---|
-| **Voiture** | batterie, autonomie, ouvrants (vue de dessus), verrouillage, santé, voyants, entretien, position, klaxon, warnings |
-| **Préchauffage** | clim (lancer / arrêter, température, dégivrage), sièges et volant chauffants, **planificateur de départ** |
-| **Recharge** | état, temps restant, charge programmée, tarif en cours, **coût des recharges**, batterie sur 7 jours |
+| **Voiture** | photo de ta voiture, batterie, autonomie, ouvrants (vue de dessus), verrouillage (empreinte pour déverrouiller), carte de position, santé, entretien, klaxon, warnings, **alertes** |
+| **Préchauffage** | clim (lancer / arrêter, température, dégivrage), sièges et volant chauffants, **planificateur de départ** (chauffe et dégivre s'il fait froid, rafraîchit s'il fait chaud) |
+| **Recharge** | état, temps restant, charge programmée, tarif en cours, **coût des recharges** (heures pleines / creuses), consommation aux 100 km, historique, batterie sur 7 jours |
 | **Trajets** | km jour / semaine / mois / année, score de conduite, km par jour sur 30 jours |
+
+Et aussi : **widget** d'écran d'accueil (batterie, autonomie, bouton Préchauffer), **raccourcis** par appui long sur
+l'icône (Préchauffer, Verrouiller, Actualiser), ouverture instantanée avec les dernières valeurs, thème clair / sombre
+qui suit le téléphone.
 
 Seules les cartes que ta voiture sait remplir sont affichées.
 
@@ -35,8 +39,13 @@ des réglages (`input_*`, `schedule`) et deux automatisations, tous nommés **«
 
 - `CHRplus préchauffage` : les jours choisis, lance la clim X minutes avant l'heure de départ s'il fait plus froid
   que le seuil. Tout tourne dans Home Assistant, même téléphone éteint.
-- `CHRplus suivi des coûts` : estime l'énergie et le prix de chaque recharge (% gagné × capacité, ~10 % de pertes)
-  et le total du mois. Règle la capacité de la batterie et le prix du kWh dans l'onglet Recharge.
+- `CHRplus suivi des coûts` : estime l'énergie et le prix de chaque recharge (% gagné × capacité, ~10 % de pertes),
+  au tarif en cours au début de la charge (heures pleines / creuses si un capteur de tarif est choisi), et le total
+  du mois. Règle la capacité de la batterie et les prix dans l'onglet Recharge.
+- `CHRplus alertes` : voiture pas verrouillée à 22 h, ouvrant ouvert 10 min, recharge terminée, batterie sous 20 %,
+  envoyées sur le téléphone choisi (appli Home Assistant Companion).
+
+La carte utilise des fonds © OpenStreetMap / © CARTO.
 
 Pour tout retirer : supprime ce qui commence par « CHRplus » dans Paramètres → Automatisations et Paramètres → Entrées.
 
