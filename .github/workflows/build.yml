@@ -17,12 +17,22 @@ jobs:
       - name: Clé de signature (secret KEYSTORE_B64)
         env:
           KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_B64" ]; then
             echo "::error::Secret KEYSTORE_B64 absent. Ajoute-le dans Settings > Secrets and variables > Actions (voir README)."
             exit 1
           fi
-          echo "$KEYSTORE_B64" | base64 -d > app/release.jks
+          # Tolère les espaces / retours à la ligne ajoutés au collage
+          printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n\t"' | base64 -d > app/release.jks || {
+            echo "::error::Le secret KEYSTORE_B64 n'est pas un texte base64 valide (copie incomplète ?). Recolle tout le contenu du fichier KEYSTORE_B64.txt."
+            exit 1
+          }
+          keytool -list -keystore app/release.jks -storepass "${SIGNING_PASSWORD:-chrplus-app}" >/dev/null || {
+            echo "::error::La clé décodée est illisible : le contenu du secret KEYSTORE_B64 est incomplet."
+            exit 1
+          }
+          echo "Clé de signature OK ($(wc -c < app/release.jks) octets)"
 
       - uses: actions/setup-java@v4
         with:
