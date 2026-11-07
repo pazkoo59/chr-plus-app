@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Autorise aussi l'adresse locale en http (ex. http://192.168.1.x:8123) en plus de Nabu Casa. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

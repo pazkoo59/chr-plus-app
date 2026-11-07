@@ -1,0 +1,69 @@
+name: Compiler l'APK CHR+
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clé de signature (secret KEYSTORE_B64)
+        env:
+          KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Secret KEYSTORE_B64 absent. Ajoute-le dans Settings > Secrets and variables > Actions (voir README)."
+            exit 1
+          fi
+          # Tolère les espaces / retours à la ligne ajoutés au collage
+          printf '%s' "$KEYSTORE_B64" | tr -d ' \r\n\t"' | base64 -d > app/release.jks || {
+            echo "::error::Le secret KEYSTORE_B64 n'est pas un texte base64 valide (copie incomplète ?). Recolle tout le contenu du fichier KEYSTORE_B64.txt."
+            exit 1
+          }
+          keytool -list -keystore app/release.jks -storepass "${SIGNING_PASSWORD:-chrplus-app}" >/dev/null || {
+            echo "::error::La clé décodée est illisible : le contenu du secret KEYSTORE_B64 est incomplet."
+            exit 1
+          }
+          echo "Clé de signature OK ($(wc -c < app/release.jks) octets)"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      # Le SDK Android est déjà installé sur les machines ubuntu de GitHub ($ANDROID_HOME).
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Compiler
+        env:
+          SIGNING_PASSWORD: ${{ secrets.SIGNING_PASSWORD }}
+        run: gradle --no-daemon assembleRelease
+
+      - name: Renommer l'APK
+        run: cp app/build/outputs/apk/release/app-release.apk CHR-Plus.apk
+
+      - name: Garder l'APK (onglet Actions)
+        uses: actions/upload-artifact@v4
+        with:
+          name: CHR-Plus-apk
+          path: CHR-Plus.apk
+
+      - name: Publier la version « latest »
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest CHR-Plus.apk \
+            --title "CHR+ v1.2.${{ github.run_number }}" \
+            --notes-file RELEASE_NOTES.md \
+            --latest

@@ -1,0 +1,8 @@
+.gradle/
+build/
+app/build/
+local.properties
+*.iml
+.idea/
+CHR-Plus.apk
+app/*.jks
