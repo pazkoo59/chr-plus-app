@@ -1176,16 +1176,23 @@
   }
   function hideSetup() { $('#tabs').style.display = ''; $('#view').innerHTML = ''; scheduleRender(); }
 
-  // ---------- Réveil de la voiture (coûte un peu de batterie 12 V) : au plus une fois par quart d'heure ----------
-  const WAKE_COOLDOWN = 15 * 60000;
+  // ---------- Réveil de la voiture (coûte de la batterie 12 V) ----------
+  // Un seul quota pour TOUS les boutons d'actualisation (état, charge, trajets) : au plus un réveil toutes les 30 min.
+  const WAKE_COOLDOWN = 30 * 60000;
+  const WAKE_ROLES = ['refresh', 'refreshElec', 'refreshTrips'];
+  let lastWakeLocal = 0;
+  function lastWakeAt() {
+    // L'état d'un bouton = date du dernier appui (appli, HA ou automatisation) ; on garde le plus récent de tous.
+    return WAKE_ROLES.reduce((m, r) => { const t = E[r] ? Date.parse(val(r) || '') : NaN; return isNaN(t) ? m : Math.max(m, t); }, lastWakeLocal);
+  }
   function wakeCar(role) {
     if (!E[role]) return Promise.resolve();
-    const last = Date.parse(val(role) || '');           // l'état d'un bouton = date du dernier appui (appli, HA ou automatisation)
-    const ago = isNaN(last) ? Infinity : Date.now() - last;
+    const ago = Date.now() - lastWakeAt();
     if (ago < WAKE_COOLDOWN) {
-      toast(`Voiture déjà interrogée il y a ${Math.max(1, Math.round(ago / 60000))} min : pas de nouveau réveil`);
+      toast(`Voiture déjà interrogée il y a ${Math.max(1, Math.round(ago / 60000))} min : pas de nouveau réveil (batterie 12 V)`);
       return Promise.resolve();
     }
+    lastWakeLocal = Date.now();                       // bloque aussi les doubles appuis avant le retour de HA
     return quiet(callService('button', 'press', E[role], null, 'Actualisation demandée à la voiture'));
   }
 
@@ -1224,7 +1231,7 @@
     else if (act === 'heat-now') heatNow();
     else if (act === 'heat-stop') q(callService('climate', 'set_hvac_mode', E.climate, { hvac_mode: 'off' }, 'Arrêt de la clim envoyé'));
     else if (act === 'refresh-elec') wakeCar('refreshElec');
-    else if (act === 'refresh-trips') { q(callService('button', 'press', E.refreshTrips, null, 'Actualisation demandée')); loadCharts(true); }
+    else if (act === 'refresh-trips') { wakeCar('refreshTrips'); loadCharts(true); }
     else if (act === 'install-plan') { b.disabled = true; installPlanner(); }
     else if (act === 'install-costs') { b.disabled = true; installCosts(); }
     else if (act === 'install-alerts') { b.disabled = true; installAlerts().finally(() => { b.disabled = false; }); }
